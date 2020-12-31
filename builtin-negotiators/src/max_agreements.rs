@@ -16,8 +16,8 @@ pub struct MaxAgreements {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Config {
-    max_agreements: u32,
+pub struct Config {
+    pub max_agreements: u32,
 }
 
 impl MaxAgreements {

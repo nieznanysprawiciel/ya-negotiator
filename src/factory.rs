@@ -23,7 +23,7 @@ pub enum LoadMode {
 pub struct NegotiatorConfig {
     pub name: String,
     pub load_mode: LoadMode,
-    pub config: serde_yaml::Value,
+    pub params: serde_yaml::Value,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,7 +36,7 @@ pub fn create_negotiator(config: NegotiatorsConfig) -> anyhow::Result<Arc<Negoti
     for config in config.negotiators.into_iter() {
         let name = config.name;
         let negotiator = match config.load_mode {
-            LoadMode::BuiltIn => create_builtin(&name, config.config)?,
+            LoadMode::BuiltIn => create_builtin(&name, config.params)?,
             _ => bail!("Negotiator LoadMode::{:?} not supported."),
         };
 
@@ -60,4 +60,38 @@ pub fn create_builtin(
         _ => bail!("BuiltIn negotiator {} doesn't exists.", &name),
     };
     Ok(negotiator)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ya_builtin_negotiators::*;
+
+    #[actix_rt::test]
+    async fn test_negotiators_config() {
+        let expiration_conf = NegotiatorConfig {
+            name: "LimitExpiration".to_string(),
+            load_mode: LoadMode::BuiltIn,
+            params: serde_yaml::to_value(expiration::Config {
+                min_expiration: std::time::Duration::from_secs(2),
+                max_expiration: std::time::Duration::from_secs(300),
+            })
+            .unwrap(),
+        };
+
+        let limit_conf = NegotiatorConfig {
+            name: "LimitAgreements".to_string(),
+            load_mode: LoadMode::BuiltIn,
+            params: serde_yaml::to_value(max_agreements::Config { max_agreements: 1 }).unwrap(),
+        };
+
+        let config = NegotiatorsConfig {
+            negotiators: vec![expiration_conf, limit_conf],
+        };
+
+        let serialized = serde_yaml::to_string(&config).unwrap();
+        println!("{}", serialized);
+
+        create_negotiator(serde_yaml::from_str(&serialized).unwrap()).unwrap();
+    }
 }

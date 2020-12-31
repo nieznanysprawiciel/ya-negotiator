@@ -15,19 +15,19 @@ pub struct LimitExpiration {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-struct Config {
+pub struct Config {
     #[serde(with = "humantime_serde")]
-    pub min_agreement_expiration: std::time::Duration,
+    pub min_expiration: std::time::Duration,
     #[serde(with = "humantime_serde")]
-    pub max_agreement_expiration: std::time::Duration,
+    pub max_expiration: std::time::Duration,
 }
 
 impl LimitExpiration {
     pub fn new(config: serde_yaml::Value) -> anyhow::Result<LimitExpiration> {
         let config: Config = serde_yaml::from_value(config)?;
         Ok(LimitExpiration {
-            min_expiration: chrono::Duration::from_std(config.min_agreement_expiration)?,
-            max_expiration: chrono::Duration::from_std(config.max_agreement_expiration)?,
+            min_expiration: chrono::Duration::from_std(config.min_expiration)?,
+            max_expiration: chrono::Duration::from_std(config.max_expiration)?,
         })
     }
 }

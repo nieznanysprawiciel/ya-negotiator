@@ -28,5 +28,8 @@ serde = "^1.0"
 serde_json = "^1.0"
 serde_yaml = "^0.8"
 
+[dev-dependencies]
+chrono = "^0.4.10"
+
 [patch.crates-io]
 ya-client-model = { git = "https://github.com/golemfactory/ya-client.git", rev = "e68bbd90c903c6f74f77fddb80a432d20e4e2b2a"}

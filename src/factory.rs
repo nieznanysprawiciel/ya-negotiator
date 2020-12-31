@@ -19,7 +19,6 @@ pub enum LoadMode {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-#[non_exhaustive]
 pub struct NegotiatorConfig {
     pub name: String,
     pub load_mode: LoadMode,

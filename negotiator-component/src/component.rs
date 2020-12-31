@@ -46,6 +46,7 @@ pub trait NegotiatorComponent {
 
     /// Called during Offer creation. `NegotiatorComponent` should add properties
     /// and constraints for which it is responsible during future negotiations.
+    /// TODO: Make API generic enough to work with Requestor.
     fn fill_template(&mut self, offer_template: OfferDefinition)
         -> anyhow::Result<OfferDefinition>;
 
@@ -57,7 +58,7 @@ pub trait NegotiatorComponent {
         result: &AgreementResult,
     ) -> anyhow::Result<()>;
 
-    /// Called when Negotiator decided to approve Agreement. It's only notification,
+    /// Called when Negotiator decided to approve/propose Agreement. It's only notification,
     /// `NegotiatorComponent` can't reject Agreement anymore.
     fn on_agreement_approved(&mut self, agreement_id: &str) -> anyhow::Result<()>;
 }

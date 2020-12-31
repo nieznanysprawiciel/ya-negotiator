@@ -1,0 +1,110 @@
+use chrono::{DateTime, Utc};
+
+use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
+use ya_builtin_negotiators::*;
+use ya_negotiators::factory::*;
+use ya_negotiators::ProposalResponse;
+
+use ya_client_model::market::proposal::State;
+use ya_client_model::market::NewDemand;
+use ya_client_model::market::Proposal;
+
+fn example_config() -> NegotiatorsConfig {
+    let expiration_conf = NegotiatorConfig {
+        name: "LimitExpiration".to_string(),
+        load_mode: LoadMode::BuiltIn,
+        params: serde_yaml::to_value(expiration::Config {
+            min_expiration: std::time::Duration::from_secs(30),
+            max_expiration: std::time::Duration::from_secs(300),
+        })
+        .unwrap(),
+    };
+
+    let limit_conf = NegotiatorConfig {
+        name: "LimitAgreements".to_string(),
+        load_mode: LoadMode::BuiltIn,
+        params: serde_yaml::to_value(max_agreements::Config { max_agreements: 1 }).unwrap(),
+    };
+
+    NegotiatorsConfig {
+        negotiators: vec![expiration_conf, limit_conf],
+    }
+}
+
+fn example_offer_definition() -> OfferDefinition {
+    OfferDefinition {
+        node_info: NodeInfo::with_name("dany"),
+        srv_info: ServiceInfo::new(InfNodeInfo::default(), serde_json::Value::Null),
+        com_info: Default::default(),
+        offer: OfferTemplate::default(),
+    }
+}
+
+fn example_demand(deadline: DateTime<Utc>, subnet: &str) -> NewDemand {
+    let ts = deadline.timestamp_millis();
+    let properties = serde_json::json!({
+        "golem.node.id.name": "interactive-example",
+        "golem.node.debug.subnet": subnet,
+        "golem.srv.comp.task_package": "package".to_string(),
+        "golem.srv.comp.expiration": ts
+    });
+
+    // No constraints, since we don't validate them whatsoever
+    let constraints = "".to_string();
+
+    NewDemand {
+        properties,
+        constraints,
+    }
+}
+
+fn proposal_from_demand(demand: &NewDemand) -> Proposal {
+    Proposal {
+        properties: demand.properties.clone(),
+        constraints: demand.constraints.clone(),
+        proposal_id: "".to_string(),
+        issuer_id: Default::default(),
+        state: State::Draft,
+        timestamp: Utc::now(),
+        prev_proposal_id: None,
+    }
+}
+
+#[actix_rt::test]
+async fn test_negotiation() {
+    let config = example_config();
+    let negotiator = create_negotiator(config).unwrap();
+
+    let offer = negotiator
+        .create_offer(&example_offer_definition())
+        .await
+        .unwrap();
+    let offer_id = "145765762127346324734".to_string();
+
+    let demand = example_demand(Utc::now() + chrono::Duration::seconds(50), "net-1");
+    let proposal = proposal_from_demand(&demand);
+
+    let result = negotiator
+        .react_to_proposal(&offer, &offer_id, &proposal)
+        .await
+        .unwrap();
+
+    match result {
+        ProposalResponse::CounterProposal { .. } => {}
+        _ => panic!("Expected counter proposal"),
+    }
+
+    // Check variant with to long expiration time. We expect, that proposal will be rejected.
+    let demand = example_demand(Utc::now() + chrono::Duration::seconds(900), "net-1");
+    let proposal = proposal_from_demand(&demand);
+
+    let result = negotiator
+        .react_to_proposal(&offer, &offer_id, &proposal)
+        .await
+        .unwrap();
+
+    match result {
+        ProposalResponse::RejectProposal { .. } => {}
+        _ => panic!("Expected reject proposal"),
+    }
+}

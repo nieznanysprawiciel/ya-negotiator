@@ -1,0 +1,32 @@
+[package]
+name = "ya-negotiators"
+version = "0.1.0"
+authors = ["nieznany.sprawiciel <witek@golem.network>"]
+edition = "2018"
+
+
+[workspace]
+members = [
+    "negotiator-component",
+    "agreement-utils",
+    "builtin-negotiators",
+]
+
+[dependencies]
+ya-agreement-utils = { path = "agreement-utils" }
+ya-negotiator-component = { path = "negotiator-component" }
+ya-builtin-negotiators = { path = "builtin-negotiators" }
+
+ya-client-model = "^0.2"
+
+actix = { version = "0.10" }
+actix-rt = "1.1.1"
+actix_derive = "^0.5.0"
+anyhow = "^1.0"
+derive_more = "0.99.11"
+serde = "^1.0"
+serde_json = "^1.0"
+serde_yaml = "^0.8"
+
+[patch.crates-io]
+ya-client-model = { git = "https://github.com/golemfactory/ya-client.git", rev = "e68bbd90c903c6f74f77fddb80a432d20e4e2b2a"}

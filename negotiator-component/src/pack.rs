@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use std::collections::HashMap;
 
-use ya_agreement_utils::OfferDefinition;
+use ya_agreement_utils::OfferTemplate;
 
 use crate::component::{AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView};
 
@@ -62,8 +62,8 @@ impl NegotiatorComponent for NegotiatorsPack {
 
     fn fill_template(
         &mut self,
-        mut offer_template: OfferDefinition,
-    ) -> anyhow::Result<OfferDefinition> {
+        mut offer_template: OfferTemplate,
+    ) -> anyhow::Result<OfferTemplate> {
         for (name, component) in &mut self.components {
             offer_template = component.fill_template(offer_template).map_err(|e| {
                 anyhow!(

@@ -1,6 +1,7 @@
 mod composite;
 pub mod factory;
 mod negotiators;
+mod shared_lib;
 
 pub use composite::CompositeNegotiator;
 

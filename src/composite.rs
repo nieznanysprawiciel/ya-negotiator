@@ -5,10 +5,8 @@ use serde_json::Value;
 use ya_client_model::market::{NewOffer, Reason};
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView};
-use crate::negotiators::{
-    offer_definition_to_offer, AgreementResponse, Negotiator, ProposalResponse,
-};
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
+use crate::negotiators::{AgreementResponse, Negotiator, ProposalResponse};
 use crate::NegotiatorsPack;
 
 use ya_agreement_utils::agreement::expand;
@@ -29,8 +27,13 @@ impl Handler<CreateOffer> for CompositeNegotiator {
     type Result = anyhow::Result<NewOffer>;
 
     fn handle(&mut self, msg: CreateOffer, _: &mut Context<Self>) -> Self::Result {
-        let offer = self.components.fill_template(msg.offer_definition)?;
-        Ok(offer_definition_to_offer(offer))
+        let offer_template = self
+            .components
+            .fill_template(msg.offer_definition.into_template())?;
+        Ok(NewOffer::new(
+            offer_template.properties,
+            offer_template.constraints,
+        ))
     }
 }
 

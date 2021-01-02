@@ -1,8 +1,10 @@
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::negotiators::NegotiatorAddr;
+use super::shared_lib::SharedLibNegotiator;
 use crate::CompositeNegotiator;
 
 use ya_negotiator_component::component::NegotiatorComponent;
@@ -11,11 +13,11 @@ use ya_negotiator_component::NegotiatorsPack;
 use crate::builtin::LimitExpiration;
 use crate::builtin::MaxAgreements;
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[non_exhaustive]
 pub enum LoadMode {
     BuiltIn,
-    SharedLibrary,
+    SharedLibrary { path: PathBuf },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,7 +38,7 @@ pub fn create_negotiator(config: NegotiatorsConfig) -> anyhow::Result<Arc<Negoti
         let name = config.name;
         let negotiator = match config.load_mode {
             LoadMode::BuiltIn => create_builtin(&name, config.params)?,
-            _ => bail!("Negotiator LoadMode::{:?} not supported."),
+            LoadMode::SharedLibrary { path } => create_shared_lib(&path, &name, config.params)?,
         };
 
         components = components.add_component(&name, negotiator);
@@ -59,6 +61,14 @@ pub fn create_builtin(
         _ => bail!("BuiltIn negotiator {} doesn't exists.", &name),
     };
     Ok(negotiator)
+}
+
+pub fn create_shared_lib(
+    path: &Path,
+    name: &str,
+    config: serde_yaml::Value,
+) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
+    SharedLibNegotiator::new(path, name, config)
 }
 
 #[cfg(test)]

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use ya_client_model::market::Reason;
 
-use ya_agreement_utils::OfferDefinition;
+use ya_agreement_utils::OfferTemplate;
 use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView,
 };
@@ -52,10 +52,7 @@ impl NegotiatorComponent for MaxAgreements {
         }
     }
 
-    fn fill_template(
-        &mut self,
-        offer_template: OfferDefinition,
-    ) -> anyhow::Result<OfferDefinition> {
+    fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate> {
         Ok(offer_template)
     }
 

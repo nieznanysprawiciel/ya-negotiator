@@ -105,11 +105,6 @@ pub trait Negotiator:
 {
 }
 
-pub fn offer_definition_to_offer(offer_def: OfferDefinition) -> NewOffer {
-    let constraints = offer_def.offer.constraints.clone();
-    NewOffer::new(offer_def.into_json(), constraints)
-}
-
 #[derive(Clone)]
 pub struct NegotiatorAddr {
     pub on_create: Recipient<CreateOffer>,

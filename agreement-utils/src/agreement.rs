@@ -13,11 +13,15 @@ const DEFAULT_FORMAT: &str = "json";
 //  - 2 fields for parsed properties (demand, offer)
 //  - other fields for agreement remain typed.
 // TODO: Move to ya-client to make it available for third party developers.
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgreementView {
     pub json: Value,
     pub id: String,
 }
+
+pub type ProposalView = AgreementView;
+pub type OfferView = AgreementView;
+pub type DemandView = AgreementView;
 
 impl AgreementView {
     pub fn pointer(&self, pointer: &str) -> Option<&Value> {

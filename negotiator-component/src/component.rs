@@ -1,9 +1,12 @@
-use ya_agreement_utils::{AgreementView, OfferDefinition};
+use serde::{Deserialize, Serialize};
+
+use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_client_model::market::Reason;
 
 pub type ProposalView = AgreementView;
 
 /// Result returned by `NegotiatorComponent` during Proposals evaluation.
+#[derive(Serialize, Deserialize)]
 pub enum NegotiationResult {
     /// `NegotiatorComponent` fully negotiated his part of Proposal,
     /// and it can be turned into valid Agreement. Provider will send
@@ -18,7 +21,7 @@ pub enum NegotiationResult {
 }
 
 /// Result of agreement execution.
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 pub enum AgreementResult {
     /// Failed to approve agreement. (Agreement even wasn't created)
     ApprovalFailed,
@@ -47,8 +50,7 @@ pub trait NegotiatorComponent {
     /// Called during Offer creation. `NegotiatorComponent` should add properties
     /// and constraints for which it is responsible during future negotiations.
     /// TODO: Make API generic enough to work with Requestor.
-    fn fill_template(&mut self, offer_template: OfferDefinition)
-        -> anyhow::Result<OfferDefinition>;
+    fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate>;
 
     /// Called when Agreement was finished. `NegotiatorComponent` can use termination
     /// result to adjust his future negotiation strategy.

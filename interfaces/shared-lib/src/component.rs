@@ -1,12 +1,12 @@
 use abi_stable::std_types::RStr;
 use std::path::Path;
 
+use crate::interface::{load_library, BoxedSharedNegotiatorAPI};
+
 use ya_agreement_utils::OfferTemplate;
-use ya_client_model::market::Reason;
 use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView,
 };
-use ya_negotiator_shared_lib_interface::{load_library, BoxedSharedNegotiatorAPI};
 
 #[derive(thiserror::Error, Debug)]
 pub enum SharedLibError {
@@ -40,25 +40,21 @@ impl SharedLibNegotiator {
 }
 
 impl NegotiatorComponent for SharedLibNegotiator {
-    fn negotiate_step(&mut self, demand: &ProposalView, offer: ProposalView) -> NegotiationResult {
-        match (|| {
-            let demand = serde_json::to_string(&demand).map_err(SharedLibError::from)?;
-            let offer = serde_json::to_string(&offer).map_err(SharedLibError::from)?;
+    fn negotiate_step(
+        &mut self,
+        demand: &ProposalView,
+        offer: ProposalView,
+    ) -> anyhow::Result<NegotiationResult> {
+        let demand = serde_json::to_string(&demand).map_err(SharedLibError::from)?;
+        let offer = serde_json::to_string(&offer).map_err(SharedLibError::from)?;
 
-            let result = self
-                .negotiator
-                .negotiate_step(&RStr::from_str(&demand), &RStr::from_str(&offer));
+        let result = self
+            .negotiator
+            .negotiate_step(&RStr::from_str(&demand), &RStr::from_str(&offer))
+            .into_result()
+            .map_err(|e| SharedLibError::Negotiation(e.into_string()))?;
 
-            Result::<NegotiationResult, SharedLibError>::Ok(
-                serde_json::from_str(&result).map_err(SharedLibError::from)?,
-            )
-        })() {
-            Ok(result) => result,
-            // If we can't negotiate, we must reject proposal.
-            Err(e) => NegotiationResult::Reject {
-                reason: Some(Reason::new(e.to_string())),
-            },
-        }
+        Ok(serde_json::from_str(&result).map_err(SharedLibError::from)?)
     }
 
     fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate> {

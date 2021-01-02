@@ -43,20 +43,17 @@ fn proposal_expiration_from(proposal: &ProposalView) -> Result<DateTime<Utc>> {
 }
 
 impl NegotiatorComponent for LimitExpiration {
-    fn negotiate_step(&mut self, demand: &ProposalView, offer: ProposalView) -> NegotiationResult {
+    fn negotiate_step(
+        &mut self,
+        demand: &ProposalView,
+        offer: ProposalView,
+    ) -> anyhow::Result<NegotiationResult> {
         let min_expiration = Utc::now() + self.min_expiration;
         let max_expiration = Utc::now() + self.max_expiration;
 
-        let expiration = match proposal_expiration_from(&demand) {
-            Ok(expiration) => expiration,
-            Err(e) => {
-                return NegotiationResult::Reject {
-                    reason: Some(Reason::new(e)),
-                }
-            }
-        };
+        let expiration = proposal_expiration_from(&demand)?;
 
-        if expiration > max_expiration || expiration < min_expiration {
+        let result = if expiration > max_expiration || expiration < min_expiration {
             log::info!(
                 "Negotiator: Reject proposal [{}] due to expiration limits.",
                 demand.id
@@ -69,7 +66,8 @@ impl NegotiatorComponent for LimitExpiration {
             }
         } else {
             NegotiationResult::Ready { offer }
-        }
+        };
+        Ok(result)
     }
 
     fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate> {

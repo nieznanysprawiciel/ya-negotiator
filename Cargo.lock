@@ -340,6 +340,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "dll-negotiator"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "ya-negotiator-shared-lib-interface",
+]
+
+[[package]]
 name = "dtoa"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1484,13 +1492,20 @@ name = "ya-negotiator-shared-lib-interface"
 version = "0.1.0"
 dependencies = [
  "abi_stable",
+ "anyhow",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "thiserror",
+ "ya-agreement-utils",
+ "ya-client-model",
+ "ya-negotiator-component",
 ]
 
 [[package]]
 name = "ya-negotiators"
 version = "0.1.0"
 dependencies = [
- "abi_stable",
  "actix",
  "actix-rt",
  "actix_derive",

@@ -45,7 +45,11 @@ pub trait NegotiatorComponent {
     /// Push forward negotiations as far as you can.
     /// `NegotiatorComponent` should modify only properties in his responsibility
     /// and return remaining part of Proposal unchanged.
-    fn negotiate_step(&mut self, demand: &ProposalView, offer: ProposalView) -> NegotiationResult;
+    fn negotiate_step(
+        &mut self,
+        demand: &ProposalView,
+        offer: ProposalView,
+    ) -> anyhow::Result<NegotiationResult>;
 
     /// Called during Offer creation. `NegotiatorComponent` should add properties
     /// and constraints for which it is responsible during future negotiations.

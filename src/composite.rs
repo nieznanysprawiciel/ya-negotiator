@@ -54,7 +54,7 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
             id: msg.offer_id,
         };
 
-        let result = self.components.negotiate_step(&proposal, offer);
+        let result = self.components.negotiate_step(&proposal, offer)?;
         match result {
             NegotiationResult::Reject { reason } => Ok(ProposalResponse::RejectProposal { reason }),
             NegotiationResult::Ready { offer } | NegotiationResult::Negotiating { offer } => {
@@ -113,7 +113,7 @@ impl Handler<ReactToAgreement> for CompositeNegotiator {
         // Otherwise we must reject Agreement proposals, because negotiations didn't end.
         match self
             .components
-            .negotiate_step(&demand_proposal, offer_proposal)
+            .negotiate_step(&demand_proposal, offer_proposal)?
         {
             NegotiationResult::Ready { .. } => Ok(AgreementResponse::ApproveAgreement),
             NegotiationResult::Reject { reason } => {

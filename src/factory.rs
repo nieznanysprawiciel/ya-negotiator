@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::negotiators::NegotiatorAddr;
-use super::shared_lib::SharedLibNegotiator;
 use crate::CompositeNegotiator;
+
+use ya_negotiator_shared_lib_interface::SharedLibNegotiator;
 
 use ya_negotiator_component::component::NegotiatorComponent;
 use ya_negotiator_component::NegotiatorsPack;

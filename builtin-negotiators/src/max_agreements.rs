@@ -35,8 +35,12 @@ impl MaxAgreements {
 }
 
 impl NegotiatorComponent for MaxAgreements {
-    fn negotiate_step(&mut self, demand: &ProposalView, offer: ProposalView) -> NegotiationResult {
-        if self.has_free_slot() {
+    fn negotiate_step(
+        &mut self,
+        demand: &ProposalView,
+        offer: ProposalView,
+    ) -> anyhow::Result<NegotiationResult> {
+        let result = if self.has_free_slot() {
             NegotiationResult::Ready { offer }
         } else {
             log::info!(
@@ -49,7 +53,8 @@ impl NegotiatorComponent for MaxAgreements {
                     self.max_agreements
                 ))),
             }
-        }
+        };
+        Ok(result)
     }
 
     fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate> {

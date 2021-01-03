@@ -14,13 +14,23 @@ pub struct FilterNodesConfig {
     pub names: Vec<String>,
 }
 
+#[cfg(debug_assertions)]
+fn debug_or_release() -> String {
+    "debug".to_string()
+}
+
+#[cfg(not(debug_assertions))]
+fn debug_or_release() -> String {
+    "release".to_string()
+}
+
 fn example_config() -> NegotiatorsConfig {
     let filter_conf = NegotiatorConfig {
         name: "FilterNodes".to_string(),
         load_mode: LoadMode::SharedLibrary {
             path: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
                 .join("target")
-                .join("debug")
+                .join(debug_or_release())
                 .join("libdll_negotiator.so"),
         },
         params: serde_yaml::to_value(FilterNodesConfig {

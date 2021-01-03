@@ -35,5 +35,8 @@ thiserror = "^1.0"
 [dev-dependencies]
 chrono = "^0.4.10"
 
+# Test will link this library dynamically
+dll-negotiator = { path = "examples/dll-negotiator" }
+
 [patch.crates-io]
 ya-client-model = { git = "https://github.com/golemfactory/ya-client.git", rev = "e68bbd90c903c6f74f77fddb80a432d20e4e2b2a"}

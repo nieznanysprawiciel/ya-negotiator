@@ -13,3 +13,7 @@ crate-type=["rlib", "dylib"]
 ya-negotiator-shared-lib-interface = { path = "../../interfaces/shared-lib" }
 
 anyhow = "^1.0"
+serde = "^1.0"
+serde_yaml = "^0.8"
+
+abi_stable = "0.9.1"

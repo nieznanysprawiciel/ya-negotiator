@@ -343,7 +343,10 @@ dependencies = [
 name = "dll-negotiator"
 version = "0.1.0"
 dependencies = [
+ "abi_stable",
  "anyhow",
+ "serde",
+ "serde_yaml",
  "ya-negotiator-shared-lib-interface",
 ]
 

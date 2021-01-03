@@ -16,6 +16,8 @@ pub enum SharedLibError {
     Negotiation(String),
     #[error("Failed to serialize negotiator config. {0}")]
     InvalidConfig(#[from] serde_yaml::Error),
+    #[error("Failed to initialize negotiator '{0}'. {1}")]
+    Initialization(String, String),
 }
 
 /// Negotiator loaded from shared library.
@@ -33,7 +35,11 @@ impl SharedLibNegotiator {
 
         let library = load_library(path)?;
         let negotiator =
-            library.create_negotiator()(RStr::from_str(negotiator_name), RStr::from_str(&config));
+            library.create_negotiator()(RStr::from_str(negotiator_name), RStr::from_str(&config))
+                .into_result()
+                .map_err(|e| {
+                    SharedLibError::Initialization(negotiator_name.to_string(), e.into_string())
+                })?;
 
         Ok(Box::new(SharedLibNegotiator { negotiator }))
     }

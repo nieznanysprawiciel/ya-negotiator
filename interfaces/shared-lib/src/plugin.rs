@@ -1,22 +1,54 @@
+use abi_stable::sabi_trait::TU_Opaque;
 use abi_stable::std_types::{RResult, RResult::ROk, RStr, RString};
 
-use crate::interface::SharedNegotiatorAPI;
+use crate::interface::{BoxedSharedNegotiatorAPI, SharedNegotiatorAPI};
 
 use crate::SharedLibError;
 
+use abi_stable::std_types::RResult::RErr;
 pub use ya_agreement_utils::OfferTemplate;
 pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView,
 };
 
-pub struct NegotiatorWrapper<T: NegotiatorComponent + Sized> {
+pub trait NegotiatorConstructor<T: NegotiatorComponent + Sized> {
+    fn new(name: &str, config: serde_yaml::Value) -> anyhow::Result<T>;
+}
+
+/// Wraps `NegotiatorComponent` inside shared library and translates communication
+/// from outside to `NegotiatorComponent` API.
+/// This way developer can only implement more convenient API, instead of being force to deal
+/// with binary compatibility problems.
+pub struct NegotiatorWrapper<T: NegotiatorComponent + NegotiatorConstructor<T> + Sized> {
     component: T,
+}
+
+impl<T> NegotiatorWrapper<T>
+where
+    T: NegotiatorComponent + NegotiatorConstructor<T> + Sized + 'static,
+{
+    pub fn new(name: RStr, config: RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> {
+        match Self::new_impl(name, config) {
+            Ok(nagotiator) => ROk(nagotiator),
+            Err(e) => RErr(RString::from(e.to_string())),
+        }
+    }
+
+    fn new_impl(name: RStr, config: RStr) -> anyhow::Result<BoxedSharedNegotiatorAPI> {
+        let config = serde_yaml::from_str(config.as_str())?;
+        let component = T::new(name.as_str(), config)?;
+
+        Ok(BoxedSharedNegotiatorAPI::from_value(
+            NegotiatorWrapper { component },
+            TU_Opaque,
+        ))
+    }
 }
 
 impl<T> SharedNegotiatorAPI for NegotiatorWrapper<T>
 where
-    T: NegotiatorComponent + Sized,
+    T: NegotiatorComponent + NegotiatorConstructor<T> + Sized,
 {
     fn negotiate_step(&mut self, demand: &RStr, offer: &RStr) -> RResult<RString, RString> {
         match (|| {

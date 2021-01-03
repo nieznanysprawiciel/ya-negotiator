@@ -32,7 +32,7 @@ pub struct NegotiatorLib {
     */
     #[sabi(last_prefix_field)]
     /// Create negotiator. First parameter is name. Second parameter is negotiator config.
-    pub create_negotiator: extern "C" fn(RStr, RStr) -> BoxedSharedNegotiatorAPI,
+    pub create_negotiator: extern "C" fn(RStr, RStr) -> RResult<BoxedSharedNegotiatorAPI, RString>,
 }
 
 /// The RootModule trait defines how to load the root module of a library.

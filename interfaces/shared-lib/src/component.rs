@@ -3,10 +3,8 @@ use std::path::Path;
 
 use crate::interface::{load_library, BoxedSharedNegotiatorAPI};
 
-use ya_agreement_utils::OfferTemplate;
-use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView,
-};
+use ya_agreement_utils::{OfferTemplate, ProposalView};
+use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
 
 #[derive(thiserror::Error, Debug)]
 pub enum SharedLibError {

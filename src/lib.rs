@@ -7,7 +7,7 @@ pub use composite::CompositeNegotiator;
 pub use negotiators::{AgreementResponse, Negotiator, NegotiatorAddr, ProposalResponse};
 
 pub use ya_negotiator_component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack, ProposalView,
+    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack,
 };
 
 pub mod builtin {
@@ -15,7 +15,8 @@ pub mod builtin {
 }
 
 pub mod component {
+    pub use ya_agreement_utils::ProposalView;
     pub use ya_negotiator_component::{
-        AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack, ProposalView,
+        AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack,
     };
 }

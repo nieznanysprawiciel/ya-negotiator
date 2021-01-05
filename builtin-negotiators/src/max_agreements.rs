@@ -4,10 +4,8 @@ use std::collections::HashSet;
 
 use ya_client_model::market::Reason;
 
-use ya_agreement_utils::OfferTemplate;
-use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView,
-};
+use ya_agreement_utils::{OfferTemplate, ProposalView};
+use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
 
 /// Negotiator that can limit number of running agreements.
 pub struct MaxAgreements {

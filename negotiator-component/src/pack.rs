@@ -1,9 +1,9 @@
 use anyhow::anyhow;
 use std::collections::HashMap;
 
-use ya_agreement_utils::OfferTemplate;
+use ya_agreement_utils::{OfferTemplate, ProposalView};
 
-use crate::component::{AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView};
+use crate::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
 
 pub struct NegotiatorsPack {
     components: HashMap<String, Box<dyn NegotiatorComponent>>,

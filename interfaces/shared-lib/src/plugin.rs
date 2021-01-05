@@ -8,10 +8,10 @@ use std::sync::{Arc, Mutex};
 use crate::interface::{BoxedSharedNegotiatorAPI, SharedNegotiatorAPI};
 use crate::SharedLibError;
 
-pub use ya_agreement_utils::OfferTemplate;
+pub use ya_agreement_utils::{OfferTemplate, ProposalView};
 pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView,
+    AgreementResult, NegotiationResult, NegotiatorComponent,
 };
 
 pub trait NegotiatorConstructor<T: NegotiatorComponent + Sync + Send + Sized>: Sync + Send {

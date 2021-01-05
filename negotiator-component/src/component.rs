@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 
-use ya_agreement_utils::{AgreementView, OfferTemplate};
+use ya_agreement_utils::{OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
-
-pub type ProposalView = AgreementView;
 
 /// Result returned by `NegotiatorComponent` during Proposals evaluation.
 #[derive(Serialize, Deserialize)]

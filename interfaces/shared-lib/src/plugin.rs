@@ -1,18 +1,20 @@
+use abi_stable::sabi_extern_fn;
 use abi_stable::sabi_trait::TU_Opaque;
-use abi_stable::std_types::{RResult, RResult::ROk, RStr, RString};
+use abi_stable::std_types::{RResult, RResult::RErr, RResult::ROk, RStr, RString};
+use lazy_static::lazy_static;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 
 use crate::interface::{BoxedSharedNegotiatorAPI, SharedNegotiatorAPI};
-
 use crate::SharedLibError;
 
-use abi_stable::std_types::RResult::RErr;
 pub use ya_agreement_utils::OfferTemplate;
 pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, ProposalView,
 };
 
-pub trait NegotiatorConstructor<T: NegotiatorComponent + Sized> {
+pub trait NegotiatorConstructor<T: NegotiatorComponent + Sync + Send + Sized>: Sync + Send {
     fn new(name: &str, config: serde_yaml::Value) -> anyhow::Result<T>;
 }
 
@@ -125,4 +127,67 @@ where
             Err(e) => RResult::RErr(RString::from(e.to_string())),
         }
     }
+}
+
+type ConstructorFunction =
+    Box<dyn Fn(RStr, RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> + Send + Sync>;
+
+lazy_static! {
+    /// Contains functions that can create negotiators by name.
+    static ref CONSTRUCTORS: Arc<Mutex<HashMap<&'static str, ConstructorFunction>>> = Arc::new(Mutex::new(HashMap::new()));
+}
+
+pub fn register_negotiator_impl(
+    name: &'static str,
+    fun: ConstructorFunction,
+) -> anyhow::Result<()> {
+    println!("Registering {}", name);
+    (*CONSTRUCTORS).lock().unwrap().insert(name, fun);
+    println!(
+        "Registered negotiators: {:#?}",
+        (*CONSTRUCTORS).lock().unwrap().len()
+    );
+    Ok(())
+}
+
+#[sabi_extern_fn]
+pub fn create_negotiator(name: RStr, config: RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> {
+    println!("Creating negotiator: {}", name.as_str());
+    let map = match (*CONSTRUCTORS).lock() {
+        Ok(map) => map,
+        Err(e) => return RErr(RString::from(e.to_string())),
+    };
+
+    match map.get(name.as_str()) {
+        Some(constructor) => constructor(name, config),
+        None => RErr(RString::from(format!("Negotiator '{}' not found.", name))),
+    }
+}
+
+#[macro_export]
+macro_rules! register_negotiators_inner {
+    ($NegotiatorType:ty) => {{
+        println!("Registering macro {}", stringify!($NegotiatorType));
+        ya_negotiator_shared_lib_interface::plugin::register_negotiator_impl(stringify!($NegotiatorType), Box::new(|name, config| {
+            ya_negotiator_shared_lib_interface::plugin::NegotiatorWrapper::<$NegotiatorType>::new(name, config)
+        })).unwrap();
+    }};
+    ($NegotiatorType:ty, $($Rest:ty),+) => {
+        ya_negotiator_shared_lib_interface::register_negotiators_inner!($NegotiatorType)
+        ya_negotiator_shared_lib_interface::register_negotiators_inner!($($Rest),+)
+    };
+}
+
+#[macro_export]
+macro_rules! register_negotiators {
+    ($($NegotiatorTypes:ty),+) => {
+        #[ya_negotiator_shared_lib_interface::export_root_module]
+        pub fn get_library() -> ya_negotiator_shared_lib_interface::interface::NegotiatorLib_Ref {
+            ya_negotiator_shared_lib_interface::register_negotiators_inner!($($NegotiatorTypes),+);
+
+            ya_negotiator_shared_lib_interface::interface::NegotiatorLib {
+                create_negotiator: ya_negotiator_shared_lib_interface::plugin::create_negotiator
+            }.leak_into_prefix()
+        }
+    };
 }

@@ -1,8 +1,10 @@
 use serde::{Deserialize, Serialize};
+
 use ya_negotiator_shared_lib_interface::plugin::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorConstructor,
-    NegotiatorWrapper, OfferTemplate, ProposalView, Reason,
+    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorConstructor, OfferTemplate,
+    ProposalView, Reason,
 };
+use ya_negotiator_shared_lib_interface::*;
 
 pub struct FilterNodes {
     names: Vec<String>,
@@ -61,21 +63,4 @@ impl NegotiatorComponent for FilterNodes {
     }
 }
 
-use abi_stable::std_types::{RResult, RResult::RErr, RStr, RString};
-use abi_stable::{export_root_module, prefix_type::PrefixTypeTrait, sabi_extern_fn};
-use ya_negotiator_shared_lib_interface::interface::{
-    BoxedSharedNegotiatorAPI, NegotiatorLib, NegotiatorLib_Ref,
-};
-
-#[sabi_extern_fn]
-pub fn create_negotiator(name: RStr, config: RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> {
-    match name.as_str() {
-        "FilterNodes" => NegotiatorWrapper::<FilterNodes>::new(name, config),
-        _ => RErr(RString::from(format!("Negotiator {} not found.", name))),
-    }
-}
-
-#[export_root_module]
-pub fn get_library() -> NegotiatorLib_Ref {
-    NegotiatorLib { create_negotiator }.leak_into_prefix()
-}
+register_negotiators!(FilterNodes);

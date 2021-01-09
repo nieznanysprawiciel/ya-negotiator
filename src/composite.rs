@@ -53,7 +53,7 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
                 constraints,
             },
             id: msg.offer_id,
-            // TODO: How to set our ow Id??
+            // TODO: How to set our own Id??
             issuer: Default::default(),
         };
 

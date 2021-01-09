@@ -143,18 +143,12 @@ pub fn register_negotiator_impl(
     name: &'static str,
     fun: ConstructorFunction,
 ) -> anyhow::Result<()> {
-    println!("Registering {}", name);
     (*CONSTRUCTORS).lock().unwrap().insert(name, fun);
-    println!(
-        "Registered negotiators: {:#?}",
-        (*CONSTRUCTORS).lock().unwrap().len()
-    );
     Ok(())
 }
 
 #[sabi_extern_fn]
 pub fn create_negotiator(name: RStr, config: RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> {
-    println!("Creating negotiator: {}", name.as_str());
     let map = match (*CONSTRUCTORS).lock() {
         Ok(map) => map,
         Err(e) => return RErr(RString::from(e.to_string())),
@@ -169,7 +163,6 @@ pub fn create_negotiator(name: RStr, config: RStr) -> RResult<BoxedSharedNegotia
 #[macro_export]
 macro_rules! register_negotiators_inner {
     ($NegotiatorType:ty) => {{
-        println!("Registering macro {}", stringify!($NegotiatorType));
         ya_negotiator_shared_lib_interface::plugin::register_negotiator_impl(stringify!($NegotiatorType), Box::new(|name, config| {
             ya_negotiator_shared_lib_interface::plugin::NegotiatorWrapper::<$NegotiatorType>::new(name, config)
         })).unwrap();

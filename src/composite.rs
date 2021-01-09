@@ -9,8 +9,9 @@ use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, Reac
 use crate::negotiators::{AgreementResponse, Negotiator, ProposalResponse};
 use crate::NegotiatorsPack;
 
+use std::convert::TryFrom;
 use ya_agreement_utils::agreement::expand;
-use ya_agreement_utils::AgreementView;
+use ya_agreement_utils::{AgreementView, OfferTemplate};
 
 /// Negotiator that can limit number of running agreements.
 pub struct CompositeNegotiator {
@@ -44,14 +45,16 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
         // In current implementation we don't allow to change constraints, so we take
         // them from initial Offer.
         let constraints = msg.offer.constraints;
-        let proposal = ProposalView {
-            id: msg.demand.proposal_id,
-            json: expand(msg.demand.properties),
-        };
+        let proposal = ProposalView::try_from(&msg.demand)?;
 
         let offer = ProposalView {
-            json: expand(msg.offer.properties),
+            content: OfferTemplate {
+                properties: expand(msg.offer.properties),
+                constraints,
+            },
             id: msg.offer_id,
+            // TODO: How to set our ow Id??
+            issuer: Default::default(),
         };
 
         let result = self.components.negotiate_step(&proposal, offer)?;
@@ -59,8 +62,8 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
             NegotiationResult::Reject { reason } => Ok(ProposalResponse::RejectProposal { reason }),
             NegotiationResult::Ready { offer } | NegotiationResult::Negotiating { offer } => {
                 let offer = NewOffer {
-                    properties: offer.json,
-                    constraints,
+                    properties: offer.content.properties,
+                    constraints: offer.content.constraints,
                 };
                 Ok(ProposalResponse::CounterProposal { offer })
             }
@@ -87,13 +90,21 @@ pub fn to_proposal_views(
         .unwrap_or(Value::Null);
 
     let offer_proposal = ProposalView {
-        json: offer_proposal,
+        content: OfferTemplate {
+            properties: offer_proposal,
+            constraints: agreement.pointer_typed("/offer/constraints")?,
+        },
         id: offer_id,
+        issuer: agreement.pointer_typed("/offer/providerId")?,
     };
 
     let demand_proposal = ProposalView {
-        json: demand_proposal,
+        content: OfferTemplate {
+            properties: demand_proposal,
+            constraints: agreement.pointer_typed("/demand/constraints")?,
+        },
         id: demand_id,
+        issuer: agreement.pointer_typed("/demand/providerId")?,
     };
     Ok((demand_proposal, offer_proposal))
 }
@@ -102,12 +113,13 @@ impl Handler<ReactToAgreement> for CompositeNegotiator {
     type Result = anyhow::Result<AgreementResponse>;
 
     fn handle(&mut self, msg: ReactToAgreement, _: &mut Context<Self>) -> Self::Result {
-        let (demand_proposal, offer_proposal) = to_proposal_views(msg.agreement).map_err(|e| {
-            anyhow!(
-                "Negotiator failed to extract Proposals from Agreement. {}",
-                e
-            )
-        })?;
+        let (demand_proposal, offer_proposal) =
+            to_proposal_views(msg.agreement.clone()).map_err(|e| {
+                anyhow!(
+                    "Negotiator failed to extract Proposals from Agreement. {}",
+                    e
+                )
+            })?;
 
         // We expect that all `NegotiatorComponents` should return ready state.
         // Otherwise we must reject Agreement proposals, because negotiations didn't end.
@@ -115,7 +127,10 @@ impl Handler<ReactToAgreement> for CompositeNegotiator {
             .components
             .negotiate_step(&demand_proposal, offer_proposal)?
         {
-            NegotiationResult::Ready { .. } => Ok(AgreementResponse::ApproveAgreement),
+            NegotiationResult::Ready { .. } => {
+                self.components.on_agreement_approved(&msg.agreement).ok();
+                Ok(AgreementResponse::ApproveAgreement)
+            }
             NegotiationResult::Reject { reason } => {
                 Ok(AgreementResponse::RejectAgreement { reason })
             }

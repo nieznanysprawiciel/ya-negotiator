@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use ya_agreement_utils::{OfferTemplate, ProposalView};
+use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
 
 /// Result returned by `NegotiatorComponent` during Proposals evaluation.
@@ -49,10 +49,9 @@ pub trait NegotiatorComponent {
         offer: ProposalView,
     ) -> anyhow::Result<NegotiationResult>;
 
-    /// Called during Offer creation. `NegotiatorComponent` should add properties
+    /// Called during Offer/Demand creation. `NegotiatorComponent` should add properties
     /// and constraints for which it is responsible during future negotiations.
-    /// TODO: Make API generic enough to work with Requestor.
-    fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate>;
+    fn fill_template(&mut self, template: OfferTemplate) -> anyhow::Result<OfferTemplate>;
 
     /// Called when Agreement was finished. `NegotiatorComponent` can use termination
     /// result to adjust his future negotiation strategy.
@@ -64,5 +63,6 @@ pub trait NegotiatorComponent {
 
     /// Called when Negotiator decided to approve/propose Agreement. It's only notification,
     /// `NegotiatorComponent` can't reject Agreement anymore.
-    fn on_agreement_approved(&mut self, agreement_id: &str) -> anyhow::Result<()>;
+    /// TODO: Can negotiator find out from which Proposals is this Agreement created??
+    fn on_agreement_approved(&mut self, agreement: &AgreementView) -> anyhow::Result<()>;
 }

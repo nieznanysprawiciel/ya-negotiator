@@ -1,7 +1,7 @@
 use anyhow::anyhow;
 use std::collections::HashMap;
 
-use ya_agreement_utils::{OfferTemplate, ProposalView};
+use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 
 use crate::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
 
@@ -97,15 +97,15 @@ impl NegotiatorComponent for NegotiatorsPack {
         Ok(())
     }
 
-    fn on_agreement_approved(&mut self, agreement_id: &str) -> anyhow::Result<()> {
+    fn on_agreement_approved(&mut self, agreement: &AgreementView) -> anyhow::Result<()> {
         for (name, component) in &mut self.components {
             component
-                .on_agreement_approved(agreement_id)
+                .on_agreement_approved(agreement)
                 .map_err(|e| {
                     log::warn!(
                         "Negotiator component '{}' failed handling Agreement [{}] approval. {}",
                         name,
-                        agreement_id,
+                        agreement.id,
                         e
                     )
                 })

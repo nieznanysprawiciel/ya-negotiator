@@ -1,5 +1,8 @@
 use ya_client_model::market::Agreement;
 
+pub use crate::proposal::ProposalView;
+pub use crate::template::OfferTemplate;
+
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
@@ -10,18 +13,16 @@ pub const PROPERTY_TAG: &str = "@tag";
 const DEFAULT_FORMAT: &str = "json";
 
 // TODO: Consider different structure:
-//  - 2 fields for parsed properties (demand, offer)
+//  - 2 fields for parsed properties (demand, offer) as ProposalView
 //  - other fields for agreement remain typed.
-// TODO: Move to ya-client to make it available for third party developers.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgreementView {
     pub json: Value,
     pub id: String,
 }
 
-pub type ProposalView = AgreementView;
-pub type OfferView = AgreementView;
-pub type DemandView = AgreementView;
+pub type OfferView = ProposalView;
+pub type DemandView = ProposalView;
 
 impl AgreementView {
     pub fn pointer(&self, pointer: &str) -> Option<&Value> {
@@ -86,53 +87,6 @@ impl TryFrom<&Agreement> for AgreementView {
 
     fn try_from(agreement: &Agreement) -> Result<Self, Self::Error> {
         Self::try_from(expand(serde_json::to_value(agreement)?))
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct OfferTemplate {
-    pub properties: Value,
-    pub constraints: String,
-}
-
-impl Default for OfferTemplate {
-    fn default() -> Self {
-        OfferTemplate {
-            properties: Value::Object(Map::new()),
-            constraints: String::new(),
-        }
-    }
-}
-
-impl OfferTemplate {
-    pub fn new(properties: Value) -> Self {
-        OfferTemplate {
-            properties: Value::Object(flatten(properties)),
-            constraints: String::new(),
-        }
-    }
-
-    pub fn patch(mut self, template: Self) -> Self {
-        patch(&mut self.properties, template.properties);
-        self.add_constraints(template.constraints);
-        self
-    }
-
-    pub fn property(&self, property: &str) -> Option<&Value> {
-        self.properties.as_object().unwrap().get(property)
-    }
-
-    pub fn set_property(&mut self, key: impl ToString, value: Value) {
-        let properties = self.properties.as_object_mut().unwrap();
-        properties.insert(key.to_string(), value);
-    }
-
-    pub fn add_constraints(&mut self, constraints: String) {
-        if self.constraints.is_empty() {
-            self.constraints = constraints;
-        } else {
-            self.constraints = format!("(& {} {})", self.constraints, constraints);
-        }
     }
 }
 
@@ -311,22 +265,11 @@ fn flatten_inner(prefix: String, result: &mut Map<String, Value>, value: Value) 
     }
 }
 
-pub fn patch(a: &mut Value, b: Value) {
-    match (a, b) {
-        (a @ &mut Value::Object(_), Value::Object(b)) => {
-            let a = a.as_object_mut().unwrap();
-            for (k, v) in b {
-                patch(a.entry(k).or_insert(Value::Null), v);
-            }
-        }
-        (a, b) => *a = b,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::TypedPointer;
     use super::*;
+    use crate::template::patch;
 
     const YAML: &str = r#"
 properties:

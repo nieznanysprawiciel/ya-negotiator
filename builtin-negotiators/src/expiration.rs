@@ -2,7 +2,7 @@ use anyhow::Result;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
-use ya_agreement_utils::{OfferTemplate, ProposalView};
+use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
 use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
 
@@ -80,7 +80,7 @@ impl NegotiatorComponent for LimitExpiration {
         Ok(())
     }
 
-    fn on_agreement_approved(&mut self, _agreement_id: &str) -> anyhow::Result<()> {
+    fn on_agreement_approved(&mut self, _agreement: &AgreementView) -> anyhow::Result<()> {
         Ok(())
     }
 }

@@ -1,8 +1,8 @@
 use serde::{Deserialize, Serialize};
 
 use ya_negotiator_shared_lib_interface::plugin::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorConstructor, OfferTemplate,
-    ProposalView, Reason,
+    AgreementResult, AgreementView, NegotiationResult, NegotiatorComponent, NegotiatorConstructor,
+    OfferTemplate, ProposalView, Reason,
 };
 use ya_negotiator_shared_lib_interface::*;
 
@@ -58,7 +58,7 @@ impl NegotiatorComponent for FilterNodes {
         Ok(())
     }
 
-    fn on_agreement_approved(&mut self, _agreement_id: &str) -> anyhow::Result<()> {
+    fn on_agreement_approved(&mut self, _agreement: &AgreementView) -> anyhow::Result<()> {
         Ok(())
     }
 }

@@ -4,7 +4,7 @@ use std::collections::HashSet;
 
 use ya_client_model::market::Reason;
 
-use ya_agreement_utils::{OfferTemplate, ProposalView};
+use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
 
 /// Negotiator that can limit number of running agreements.
@@ -71,15 +71,15 @@ impl NegotiatorComponent for MaxAgreements {
         Ok(())
     }
 
-    fn on_agreement_approved(&mut self, agreement_id: &str) -> anyhow::Result<()> {
+    fn on_agreement_approved(&mut self, agreement: &AgreementView) -> anyhow::Result<()> {
         if self.has_free_slot() {
-            self.active_agreements.insert(agreement_id.to_string());
+            self.active_agreements.insert(agreement.id.clone());
             Ok(())
         } else {
-            self.active_agreements.insert(agreement_id.to_string());
+            self.active_agreements.insert(agreement.id.clone());
             bail!(
                 "Agreement [{}] approved despite not available capacity.",
-                agreement_id
+                agreement.id
             )
         }
     }

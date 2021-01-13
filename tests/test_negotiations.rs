@@ -31,13 +31,14 @@ fn example_config() -> NegotiatorsConfig {
     }
 }
 
-fn example_offer_definition() -> OfferDefinition {
+fn example_offer() -> OfferTemplate {
     OfferDefinition {
         node_info: NodeInfo::with_name("dany"),
         srv_info: ServiceInfo::new(InfNodeInfo::default(), serde_json::Value::Null),
         com_info: Default::default(),
         offer: OfferTemplate::default(),
     }
+    .into_template()
 }
 
 fn example_demand(deadline: DateTime<Utc>, subnet: &str) -> NewDemand {
@@ -75,17 +76,14 @@ async fn test_negotiation() {
     let config = example_config();
     let negotiator = create_negotiator(config).unwrap();
 
-    let offer = negotiator
-        .create_offer(&example_offer_definition())
-        .await
-        .unwrap();
-    let offer_id = "145765762127346324734".to_string();
+    let offer = negotiator.create_offer(&example_offer()).await.unwrap();
+    let offer = proposal_from_demand(&offer);
 
     let demand = example_demand(Utc::now() + chrono::Duration::seconds(50), "net-1");
     let proposal = proposal_from_demand(&demand);
 
     let result = negotiator
-        .react_to_proposal(&offer, &offer_id, &proposal)
+        .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 
@@ -99,7 +97,7 @@ async fn test_negotiation() {
     let proposal = proposal_from_demand(&demand);
 
     let result = negotiator
-        .react_to_proposal(&offer, &offer_id, &proposal)
+        .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 

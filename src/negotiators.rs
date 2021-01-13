@@ -6,7 +6,7 @@ use derive_more::Display;
 use ya_client_model::market::{NewOffer, Proposal, Reason};
 
 use crate::component::AgreementResult;
-use ya_agreement_utils::{AgreementView, OfferDefinition};
+use ya_agreement_utils::{AgreementView, OfferTemplate};
 
 /// Response for requestor proposals.
 #[derive(Debug, Display)]
@@ -51,7 +51,7 @@ pub enum AgreementResponse {
 #[derive(Message)]
 #[rtype(result = "Result<NewOffer>")]
 pub struct CreateOffer {
-    pub offer_definition: OfferDefinition,
+    pub offer_template: OfferTemplate,
 }
 
 /// Reactions to events from market. These function make market decisions
@@ -59,9 +59,10 @@ pub struct CreateOffer {
 #[derive(Message)]
 #[rtype(result = "Result<ProposalResponse>")]
 pub struct ReactToProposal {
-    pub offer_id: String,
-    pub offer: NewOffer,
-    pub demand: Proposal,
+    /// It is new proposal that we got from other party.
+    pub incoming_proposal: Proposal,
+    /// It is always our proposal that we sent last time.
+    pub our_prev_proposal: Proposal,
 }
 
 /// Reactions to events from market. These function make market decisions
@@ -114,25 +115,23 @@ pub struct NegotiatorAddr {
 }
 
 impl NegotiatorAddr {
-    pub async fn create_offer(&self, offer_definition: &OfferDefinition) -> Result<NewOffer> {
+    pub async fn create_offer(&self, template: &OfferTemplate) -> Result<NewOffer> {
         self.on_create
             .send(CreateOffer {
-                offer_definition: offer_definition.clone(),
+                offer_template: template.clone(),
             })
             .await?
     }
 
     pub async fn react_to_proposal(
         &self,
-        offer: &NewOffer,
-        offer_id: &str,
-        demand: &Proposal,
+        incoming_proposal: &Proposal,
+        our_proposal: &Proposal,
     ) -> Result<ProposalResponse> {
         self.on_proposal
             .send(ReactToProposal {
-                demand: demand.clone(),
-                offer: offer.clone(),
-                offer_id: offer_id.to_string(),
+                incoming_proposal: incoming_proposal.clone(),
+                our_prev_proposal: our_proposal.clone(),
             })
             .await?
     }

@@ -1,0 +1,21 @@
+[package]
+name = "ya-negotiators-testing"
+version = "0.1.0"
+authors = ["nieznany.sprawiciel <witek@golem.network>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ya-agreement-utils = { path = "../agreement-utils" }
+ya-negotiator-component = { path = "../negotiator-component" }
+ya-builtin-negotiators = { path = "../builtin-negotiators" }
+ya-negotiator-shared-lib-interface = { path = "../interfaces/shared-lib" }
+ya-negotiators = { path = "../" }
+
+ya-client-model = "^0.2"
+
+actix = { version = "0.10" }
+anyhow = "^1.0.31"
+chrono = "^0.4.10"
+rand = "0.7.2"

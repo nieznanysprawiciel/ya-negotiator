@@ -1526,6 +1526,23 @@ dependencies = [
  "ya-client-model",
  "ya-negotiator-component",
  "ya-negotiator-shared-lib-interface",
+ "ya-negotiators-testing",
+]
+
+[[package]]
+name = "ya-negotiators-testing"
+version = "0.1.0"
+dependencies = [
+ "actix",
+ "anyhow",
+ "chrono",
+ "rand 0.7.3",
+ "ya-agreement-utils",
+ "ya-builtin-negotiators",
+ "ya-client-model",
+ "ya-negotiator-component",
+ "ya-negotiator-shared-lib-interface",
+ "ya-negotiators",
 ]
 
 [[package]]

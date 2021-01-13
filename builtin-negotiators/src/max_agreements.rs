@@ -39,7 +39,7 @@ impl NegotiatorComponent for MaxAgreements {
         offer: ProposalView,
     ) -> anyhow::Result<NegotiationResult> {
         let result = if self.has_free_slot() {
-            NegotiationResult::Ready { offer }
+            NegotiationResult::Ready { proposal: offer }
         } else {
             log::info!(
                 "'MaxAgreements' negotiator: Reject proposal [{}] due to limit.",

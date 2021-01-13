@@ -11,7 +11,8 @@ members = [
     "agreement-utils",
     "builtin-negotiators",
     "interfaces/shared-lib",
-    "examples/dll-negotiator"
+    "examples/dll-negotiator",
+    "testing"
 ]
 
 [dependencies]
@@ -34,7 +35,7 @@ thiserror = "^1.0"
 
 [dev-dependencies]
 chrono = "^0.4.10"
-
+ya-negotiators-testing = { path = "testing" }
 # Test will link this library dynamically
 dll-negotiator = { path = "examples/dll-negotiator" }
 

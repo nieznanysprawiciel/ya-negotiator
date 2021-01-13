@@ -9,10 +9,10 @@ pub enum NegotiationResult {
     /// `NegotiatorComponent` fully negotiated his part of Proposal,
     /// and it can be turned into valid Agreement. Provider will send
     /// counter Proposal.
-    Ready { offer: ProposalView },
+    Ready { proposal: ProposalView },
     /// Proposal is not ready to become Agreement, but negotiations
     /// are in progress.
-    Negotiating { offer: ProposalView },
+    Negotiating { proposal: ProposalView },
     /// Proposal is not acceptable and should be rejected.
     /// Negotiations can't be continued.
     Reject { reason: Option<Reason> },
@@ -43,10 +43,16 @@ pub trait NegotiatorComponent {
     /// Push forward negotiations as far as you can.
     /// `NegotiatorComponent` should modify only properties in his responsibility
     /// and return remaining part of Proposal unchanged.
+    ///
+    /// Parameters:
+    /// incoming_proposal - Proposal that we got from other party.
+    /// template - First component gets Proposal from previous negotiations. All subsequent
+    ///            components change this Proposal and than it is passed to next component
+    ///            in modified shape.
     fn negotiate_step(
         &mut self,
-        demand: &ProposalView,
-        offer: ProposalView,
+        incoming_proposal: &ProposalView,
+        template: ProposalView,
     ) -> anyhow::Result<NegotiationResult>;
 
     /// Called during Offer/Demand creation. `NegotiatorComponent` should add properties

@@ -28,9 +28,7 @@ impl Handler<CreateOffer> for CompositeNegotiator {
     type Result = anyhow::Result<NewOffer>;
 
     fn handle(&mut self, msg: CreateOffer, _: &mut Context<Self>) -> Self::Result {
-        let offer_template = self
-            .components
-            .fill_template(msg.offer_definition.into_template())?;
+        let offer_template = self.components.fill_template(msg.offer_template)?;
         Ok(NewOffer::new(
             offer_template.properties,
             offer_template.constraints,
@@ -42,28 +40,25 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
     type Result = anyhow::Result<ProposalResponse>;
 
     fn handle(&mut self, msg: ReactToProposal, _: &mut Context<Self>) -> Self::Result {
-        // In current implementation we don't allow to change constraints, so we take
-        // them from initial Offer.
-        let constraints = msg.offer.constraints;
-        let proposal = ProposalView::try_from(&msg.demand)?;
-
-        let offer = ProposalView {
+        let proposal = ProposalView::try_from(&msg.incoming_proposal)?;
+        let template = ProposalView {
             content: OfferTemplate {
-                properties: expand(msg.offer.properties),
-                constraints,
+                properties: expand(msg.our_prev_proposal.properties),
+                constraints: msg.our_prev_proposal.constraints,
             },
-            id: msg.offer_id,
+            id: msg.our_prev_proposal.proposal_id,
             // TODO: How to set our own Id??
-            issuer: Default::default(),
+            issuer: msg.our_prev_proposal.issuer_id,
         };
 
-        let result = self.components.negotiate_step(&proposal, offer)?;
+        let result = self.components.negotiate_step(&proposal, template)?;
         match result {
             NegotiationResult::Reject { reason } => Ok(ProposalResponse::RejectProposal { reason }),
-            NegotiationResult::Ready { offer } | NegotiationResult::Negotiating { offer } => {
+            NegotiationResult::Ready { proposal: template }
+            | NegotiationResult::Negotiating { proposal: template } => {
                 let offer = NewOffer {
-                    properties: offer.content.properties,
-                    constraints: offer.content.constraints,
+                    properties: template.content.properties,
+                    constraints: template.content.constraints,
                 };
                 Ok(ProposalResponse::CounterProposal { offer })
             }

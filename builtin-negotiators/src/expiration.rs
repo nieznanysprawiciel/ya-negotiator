@@ -63,7 +63,7 @@ impl NegotiatorComponent for LimitExpiration {
                 ))),
             }
         } else {
-            NegotiationResult::Ready { offer }
+            NegotiationResult::Ready { proposal: offer }
         };
         Ok(result)
     }

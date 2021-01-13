@@ -29,19 +29,19 @@ impl NegotiatorsPack {
 impl NegotiatorComponent for NegotiatorsPack {
     fn negotiate_step(
         &mut self,
-        demand: &ProposalView,
-        mut offer: ProposalView,
+        incoming_proposal: &ProposalView,
+        mut template: ProposalView,
     ) -> anyhow::Result<NegotiationResult> {
         let mut all_ready = true;
         for (name, component) in &mut self.components {
-            let result = component.negotiate_step(demand, offer)?;
-            offer = match result {
-                NegotiationResult::Ready { offer } => offer,
-                NegotiationResult::Negotiating { offer } => {
+            let result = component.negotiate_step(incoming_proposal, template)?;
+            template = match result {
+                NegotiationResult::Ready { proposal: offer } => offer,
+                NegotiationResult::Negotiating { proposal: offer } => {
                     log::info!(
                         "Negotiator component '{}' is still negotiating Proposal [{}].",
                         name,
-                        demand.id
+                        incoming_proposal.id
                     );
                     all_ready = false;
                     offer
@@ -55,8 +55,8 @@ impl NegotiatorComponent for NegotiatorsPack {
         // Full negotiations is ready only, if all `NegotiatorComponent` returned
         // ready state. Otherwise we must still continue negotiations.
         Ok(match all_ready {
-            true => NegotiationResult::Ready { offer },
-            false => NegotiationResult::Negotiating { offer },
+            true => NegotiationResult::Ready { proposal: template },
+            false => NegotiationResult::Negotiating { proposal: template },
         })
     }
 

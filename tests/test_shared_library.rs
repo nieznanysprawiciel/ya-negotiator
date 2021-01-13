@@ -44,13 +44,14 @@ fn example_config() -> NegotiatorsConfig {
     }
 }
 
-fn example_offer_definition() -> OfferDefinition {
+fn example_offer_definition() -> OfferTemplate {
     OfferDefinition {
         node_info: NodeInfo::with_name("blabla"),
         srv_info: ServiceInfo::new(InfNodeInfo::default(), serde_json::Value::Null),
         com_info: Default::default(),
         offer: OfferTemplate::default(),
     }
+    .into_template()
 }
 
 fn example_demand(deadline: DateTime<Utc>, node_name: &str) -> NewDemand {
@@ -92,13 +93,13 @@ async fn test_shared_library() {
         .create_offer(&example_offer_definition())
         .await
         .unwrap();
-    let offer_id = "145765762127346324734".to_string();
+    let offer = proposal_from_demand(&offer);
 
     let demand = example_demand(Utc::now() + chrono::Duration::seconds(50), "dany");
     let proposal = proposal_from_demand(&demand);
 
     let result = negotiator
-        .react_to_proposal(&offer, &offer_id, &proposal)
+        .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 
@@ -112,7 +113,7 @@ async fn test_shared_library() {
     let proposal = proposal_from_demand(&demand);
 
     let result = negotiator
-        .react_to_proposal(&offer, &offer_id, &proposal)
+        .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 

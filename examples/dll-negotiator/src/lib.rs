@@ -37,7 +37,7 @@ impl NegotiatorComponent for FilterNodes {
                         reason: Some(Reason::new("Node on rejection list.")),
                     }
                 } else {
-                    NegotiationResult::Ready { offer }
+                    NegotiationResult::Ready { proposal: offer }
                 }
             }
             Err(_) => NegotiationResult::Reject {

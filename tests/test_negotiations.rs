@@ -88,8 +88,8 @@ async fn test_negotiation() {
         .unwrap();
 
     match result {
-        ProposalResponse::CounterProposal { .. } => {}
-        _ => panic!("Expected counter proposal"),
+        ProposalResponse::AcceptProposal { .. } => {}
+        _ => panic!("Expected AcceptProposal"),
     }
 
     // Check variant with to long expiration time. We expect, that proposal will be rejected.

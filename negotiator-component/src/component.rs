@@ -4,11 +4,15 @@ use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
 
 /// Result returned by `NegotiatorComponent` during Proposals evaluation.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum NegotiationResult {
-    /// `NegotiatorComponent` fully negotiated his part of Proposal,
-    /// and it can be turned into valid Agreement. Provider will send
-    /// counter Proposal.
+    /// `NegotiatorComponent` fully negotiated his part of Proposal, and it can be turned into
+    /// valid Agreement without changes. Provider will send counter Proposal.
+    /// `NegotiatorComponent` shouldn't return this value, if he changed anything in his
+    /// part of Proposal.
+    /// On Requestor side returning this type means, that Proposal will be proposed
+    /// to Provider. On Provider side it doesn't have any consequences, since Provider
+    /// doesn't have initiative to propose Agreements.
     Ready { proposal: ProposalView },
     /// Proposal is not ready to become Agreement, but negotiations
     /// are in progress.
@@ -19,15 +23,18 @@ pub enum NegotiationResult {
 }
 
 /// Result of agreement execution.
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum AgreementResult {
-    /// Failed to approve agreement. (Agreement even wasn't created)
+    /// Failed to approve agreement. (Agreement even wasn't created).
+    /// It can happen for Provider in case call to `approve_agreement` will fail.
+    /// For Requestor it happens, when Agreement gets rejected or it's creation/sending fails.
+    /// TODO: Maybe we should distinguish these cases with enum??
     ApprovalFailed,
     /// Agreement was finished with success after first Activity.
     ClosedByProvider,
     /// Agreement was finished with success by Requestor.
     ClosedByRequestor,
-    /// Agreement was broken by us.
+    /// Agreement was broken by one party. It indicates non successful end of Agreement.
     Broken { reason: Option<Reason> },
 }
 

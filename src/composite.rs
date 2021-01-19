@@ -10,7 +10,7 @@ use crate::negotiators::{AgreementResponse, Negotiator, ProposalResponse};
 use crate::NegotiatorsPack;
 
 use std::convert::TryFrom;
-use ya_agreement_utils::agreement::expand;
+use ya_agreement_utils::agreement::{expand, flatten};
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
 /// Negotiator that can limit number of running agreements.
@@ -47,17 +47,16 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
                 constraints: msg.our_prev_proposal.constraints,
             },
             id: msg.our_prev_proposal.proposal_id,
-            // TODO: How to set our own Id??
             issuer: msg.our_prev_proposal.issuer_id,
         };
 
         let result = self.components.negotiate_step(&proposal, template)?;
         match result {
             NegotiationResult::Reject { reason } => Ok(ProposalResponse::RejectProposal { reason }),
-            NegotiationResult::Ready { proposal: template }
-            | NegotiationResult::Negotiating { proposal: template } => {
+            NegotiationResult::Ready { .. } => Ok(ProposalResponse::AcceptProposal),
+            NegotiationResult::Negotiating { proposal: template } => {
                 let offer = NewOffer {
-                    properties: template.content.properties,
+                    properties: serde_json::Value::Object(flatten(template.content.properties)),
                     constraints: template.content.constraints,
                 };
                 Ok(ProposalResponse::CounterProposal { offer })
@@ -99,7 +98,7 @@ pub fn to_proposal_views(
             constraints: agreement.pointer_typed("/demand/constraints")?,
         },
         id: demand_id,
-        issuer: agreement.pointer_typed("/demand/providerId")?,
+        issuer: agreement.pointer_typed("/demand/requestorId")?,
     };
     Ok((demand_proposal, offer_proposal))
 }

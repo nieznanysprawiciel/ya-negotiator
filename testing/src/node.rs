@@ -2,11 +2,12 @@ use anyhow::*;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 
-use chrono::Utc;
+use chrono::{Duration, Utc};
 use std::sync::Arc;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
+use ya_client_model::market::agreement::State as AgreementState;
 use ya_client_model::market::proposal::State;
-use ya_client_model::market::{DemandOfferBase, Proposal};
+use ya_client_model::market::{Agreement, Demand, DemandOfferBase, Offer, Proposal};
 use ya_client_model::NodeId;
 use ya_negotiators::factory::{create_negotiator, NegotiatorsConfig};
 use ya_negotiators::{AgreementResponse, AgreementResult, NegotiatorAddr, ProposalResponse};
@@ -46,10 +47,12 @@ impl Node {
 
     pub async fn react_to_proposal(
         &self,
-        offer: &Proposal,
-        demand: &Proposal,
+        incoming_proposal: &Proposal,
+        our_prev_proposal: &Proposal,
     ) -> Result<ProposalResponse> {
-        self.negotiator.react_to_proposal(offer, demand).await
+        self.negotiator
+            .react_to_proposal(incoming_proposal, our_prev_proposal)
+            .await
     }
 
     pub async fn react_to_agreement(
@@ -69,7 +72,7 @@ impl Node {
             .await
     }
 
-    fn into_proposal(&self, offer: DemandOfferBase, state: State) -> Proposal {
+    pub fn into_proposal(&self, offer: DemandOfferBase, state: State) -> Proposal {
         Proposal {
             properties: offer.properties,
             constraints: offer.constraints,
@@ -78,6 +81,42 @@ impl Node {
             state,
             timestamp: Utc::now(),
             prev_proposal_id: None,
+        }
+    }
+
+    pub fn create_agreement(
+        &self,
+        demand_proposal: &Proposal,
+        offer_proposal: &Proposal,
+    ) -> Agreement {
+        let offer = Offer {
+            properties: offer_proposal.properties.clone(),
+            constraints: offer_proposal.constraints.clone(),
+            offer_id: offer_proposal.proposal_id.clone(),
+            provider_id: offer_proposal.issuer_id,
+            timestamp: offer_proposal.timestamp,
+        };
+
+        let demand = Demand {
+            properties: demand_proposal.properties.clone(),
+            constraints: demand_proposal.constraints.clone(),
+            demand_id: demand_proposal.proposal_id.clone(),
+            timestamp: demand_proposal.timestamp,
+            requestor_id: demand_proposal.issuer_id,
+        };
+
+        Agreement {
+            agreement_id: generate_id(),
+            demand,
+            offer,
+            valid_to: Utc::now() + Duration::minutes(20),
+            approved_date: None,
+            state: AgreementState::Proposal,
+            timestamp: Utc::now(),
+            app_session_id: None,
+            proposed_signature: None,
+            approved_signature: None,
+            committed_signature: None,
         }
     }
 }

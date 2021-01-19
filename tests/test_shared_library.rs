@@ -118,7 +118,7 @@ async fn test_shared_library() {
         .unwrap();
 
     match result {
-        ProposalResponse::CounterProposal { .. } => {}
-        _ => panic!("Expected counter proposal"),
+        ProposalResponse::AcceptProposal { .. } => {}
+        _ => panic!("Expected AcceptProposal"),
     }
 }

@@ -11,7 +11,7 @@ pub use ya_negotiator_component::{
 };
 
 pub mod builtin {
-    pub use ya_builtin_negotiators::{LimitExpiration, MaxAgreements};
+    pub use ya_builtin_negotiators::{AcceptAll, LimitExpiration, MaxAgreements};
 }
 
 pub mod component {

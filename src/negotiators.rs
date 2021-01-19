@@ -2,6 +2,7 @@ use actix::prelude::*;
 use actix::{Actor, Handler};
 use anyhow::Result;
 use derive_more::Display;
+use serde::{Deserialize, Serialize};
 
 use ya_client_model::market::{NewOffer, Proposal, Reason};
 
@@ -9,7 +10,7 @@ use crate::component::AgreementResult;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
 /// Response for requestor proposals.
-#[derive(Debug, Display)]
+#[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub enum ProposalResponse {
     #[display(fmt = "CounterProposal")]
@@ -29,7 +30,7 @@ pub enum ProposalResponse {
 }
 
 /// Response for requestor agreements.
-#[derive(Debug, Display)]
+#[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub enum AgreementResponse {
     ApproveAgreement,

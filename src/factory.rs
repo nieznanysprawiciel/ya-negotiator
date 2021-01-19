@@ -11,6 +11,7 @@ use ya_negotiator_shared_lib_interface::SharedLibNegotiator;
 use ya_negotiator_component::component::NegotiatorComponent;
 use ya_negotiator_component::NegotiatorsPack;
 
+use crate::builtin::AcceptAll;
 use crate::builtin::LimitExpiration;
 use crate::builtin::MaxAgreements;
 
@@ -59,6 +60,7 @@ pub fn create_builtin(
         "LimitExpiration" => {
             Box::new(LimitExpiration::new(config)?) as Box<dyn NegotiatorComponent>
         }
+        "AcceptAll" => Box::new(AcceptAll::new(config)?) as Box<dyn NegotiatorComponent>,
         _ => bail!("BuiltIn negotiator {} doesn't exists.", &name),
     };
     Ok(negotiator)

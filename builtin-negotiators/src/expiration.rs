@@ -4,7 +4,9 @@ use serde::{Deserialize, Serialize};
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
-use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
+use ya_negotiator_component::component::{
+    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
+};
 
 /// Negotiator that can limit number of running agreements.
 pub struct LimitExpiration {
@@ -45,6 +47,7 @@ impl NegotiatorComponent for LimitExpiration {
         &mut self,
         demand: &ProposalView,
         offer: ProposalView,
+        score: Score,
     ) -> anyhow::Result<NegotiationResult> {
         let min_expiration = Utc::now() + self.min_expiration;
         let max_expiration = Utc::now() + self.max_expiration;
@@ -63,7 +66,10 @@ impl NegotiatorComponent for LimitExpiration {
                 ))),
             }
         } else {
-            NegotiationResult::Ready { proposal: offer }
+            NegotiationResult::Ready {
+                proposal: offer,
+                score,
+            }
         };
         Ok(result)
     }

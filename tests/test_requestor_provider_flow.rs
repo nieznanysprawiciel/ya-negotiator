@@ -47,7 +47,7 @@ fn example_offer() -> OfferTemplate {
 fn example_demand(deadline: DateTime<Utc>) -> OfferTemplate {
     let ts = deadline.timestamp_millis();
     let properties = serde_json::json!({
-        "golem.node.id.name": "interactive-example",
+        "golem.node.id.name": "example-node",
         "golem.srv.comp.expiration": ts
     });
 

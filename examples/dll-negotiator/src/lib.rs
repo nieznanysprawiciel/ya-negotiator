@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use ya_negotiator_shared_lib_interface::plugin::{
     AgreementResult, AgreementView, NegotiationResult, NegotiatorComponent, NegotiatorConstructor,
-    OfferTemplate, ProposalView, Reason,
+    OfferTemplate, ProposalView, Reason, Score,
 };
 use ya_negotiator_shared_lib_interface::*;
 
@@ -29,6 +29,7 @@ impl NegotiatorComponent for FilterNodes {
         &mut self,
         demand: &ProposalView,
         offer: ProposalView,
+        score: Score,
     ) -> anyhow::Result<NegotiationResult> {
         Ok(match demand.pointer_typed("/golem/node/id/name") {
             Ok(node_name) => {
@@ -37,7 +38,10 @@ impl NegotiatorComponent for FilterNodes {
                         reason: Some(Reason::new("Node on rejection list.")),
                     }
                 } else {
-                    NegotiationResult::Ready { proposal: offer }
+                    NegotiationResult::Ready {
+                        proposal: offer,
+                        score,
+                    }
                 }
             }
             Err(_) => NegotiationResult::Reject {

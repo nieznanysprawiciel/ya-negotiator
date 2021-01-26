@@ -5,7 +5,9 @@ use std::collections::HashSet;
 use ya_client_model::market::Reason;
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
-use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
+use ya_negotiator_component::component::{
+    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
+};
 
 /// Negotiator that can limit number of running agreements.
 pub struct MaxAgreements {
@@ -37,9 +39,13 @@ impl NegotiatorComponent for MaxAgreements {
         &mut self,
         demand: &ProposalView,
         offer: ProposalView,
+        score: Score,
     ) -> anyhow::Result<NegotiationResult> {
         let result = if self.has_free_slot() {
-            NegotiationResult::Ready { proposal: offer }
+            NegotiationResult::Ready {
+                proposal: offer,
+                score,
+            }
         } else {
             log::info!(
                 "'MaxAgreements' negotiator: Reject proposal [{}] due to limit.",

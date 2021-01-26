@@ -58,7 +58,12 @@ pub trait SharedNegotiatorAPI {
     /// Push forward negotiations as far as you can.
     /// `NegotiatorComponent` should modify only properties in his responsibility
     /// and return remaining part of Proposal unchanged.
-    fn negotiate_step(&mut self, demand: &RStr, offer: &RStr) -> RResult<RString, RString>;
+    fn negotiate_step(
+        &mut self,
+        demand: &RStr,
+        offer: &RStr,
+        score: &RStr,
+    ) -> RResult<RString, RString>;
 
     /// Called during Offer creation. `NegotiatorComponent` should add properties
     /// and constraints for which it is responsible during future negotiations.

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 
-use crate::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
+use crate::component::{AgreementResult, NegotiationResult, NegotiatorComponent, Score};
 
 pub struct NegotiatorsPack {
     components: HashMap<String, Box<dyn NegotiatorComponent>>,
@@ -31,20 +31,32 @@ impl NegotiatorComponent for NegotiatorsPack {
         &mut self,
         incoming_proposal: &ProposalView,
         mut template: ProposalView,
+        mut score: Score,
     ) -> anyhow::Result<NegotiationResult> {
         let mut all_ready = true;
         for (name, component) in &mut self.components {
-            let result = component.negotiate_step(incoming_proposal, template)?;
-            template = match result {
-                NegotiationResult::Ready { proposal: offer } => offer,
-                NegotiationResult::Negotiating { proposal: offer } => {
+            let result = component.negotiate_step(incoming_proposal, template, score)?;
+            match result {
+                NegotiationResult::Ready {
+                    proposal: offer,
+                    score: new_score,
+                } => {
+                    template = offer;
+                    score = new_score;
+                }
+                NegotiationResult::Negotiating {
+                    proposal: offer,
+                    score: new_score,
+                } => {
                     log::info!(
                         "Negotiator component '{}' is still negotiating Proposal [{}].",
                         name,
                         incoming_proposal.id
                     );
+
                     all_ready = false;
-                    offer
+                    template = offer;
+                    score = new_score;
                 }
                 NegotiationResult::Reject { reason } => {
                     return Ok(NegotiationResult::Reject { reason })
@@ -55,8 +67,14 @@ impl NegotiatorComponent for NegotiatorsPack {
         // Full negotiations is ready only, if all `NegotiatorComponent` returned
         // ready state. Otherwise we must still continue negotiations.
         Ok(match all_ready {
-            true => NegotiationResult::Ready { proposal: template },
-            false => NegotiationResult::Negotiating { proposal: template },
+            true => NegotiationResult::Ready {
+                proposal: template,
+                score,
+            },
+            false => NegotiationResult::Negotiating {
+                proposal: template,
+                score,
+            },
         })
     }
 

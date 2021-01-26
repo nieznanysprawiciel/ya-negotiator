@@ -1,15 +1,15 @@
 use actix::{Actor, Context, Handler};
 use anyhow::anyhow;
 use serde_json::Value;
+use std::convert::TryFrom;
 
 use ya_client_model::market::{NewOffer, Reason};
 
-use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView};
+use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::negotiators::{AgreementResponse, Negotiator, ProposalResponse};
 use crate::NegotiatorsPack;
 
-use std::convert::TryFrom;
 use ya_agreement_utils::agreement::{expand, flatten};
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
@@ -50,11 +50,15 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
             issuer: msg.our_prev_proposal.issuer_id,
         };
 
-        let result = self.components.negotiate_step(&proposal, template)?;
+        let result = self
+            .components
+            .negotiate_step(&proposal, template, Score::default())?;
         match result {
             NegotiationResult::Reject { reason } => Ok(ProposalResponse::RejectProposal { reason }),
             NegotiationResult::Ready { .. } => Ok(ProposalResponse::AcceptProposal),
-            NegotiationResult::Negotiating { proposal: template } => {
+            NegotiationResult::Negotiating {
+                proposal: template, ..
+            } => {
                 let offer = NewOffer {
                     properties: serde_json::Value::Object(flatten(template.content.properties)),
                     constraints: template.content.constraints,
@@ -119,7 +123,7 @@ impl Handler<ReactToAgreement> for CompositeNegotiator {
         // Otherwise we must reject Agreement proposals, because negotiations didn't end.
         match self
             .components
-            .negotiate_step(&demand_proposal, offer_proposal)?
+            .negotiate_step(&demand_proposal, offer_proposal, Score::default())?
         {
             NegotiationResult::Ready { .. } => {
                 self.components.on_agreement_approved(&msg.agreement).ok();

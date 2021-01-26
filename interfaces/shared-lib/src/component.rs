@@ -4,7 +4,9 @@ use std::path::Path;
 use crate::interface::{load_library, BoxedSharedNegotiatorAPI};
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
-use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
+use ya_negotiator_component::component::{
+    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
+};
 
 #[derive(thiserror::Error, Debug)]
 pub enum SharedLibError {
@@ -48,13 +50,19 @@ impl NegotiatorComponent for SharedLibNegotiator {
         &mut self,
         demand: &ProposalView,
         offer: ProposalView,
+        score: Score,
     ) -> anyhow::Result<NegotiationResult> {
         let demand = serde_json::to_string(&demand).map_err(SharedLibError::from)?;
         let offer = serde_json::to_string(&offer).map_err(SharedLibError::from)?;
+        let score = serde_json::to_string(&score).map_err(SharedLibError::from)?;
 
         let result = self
             .negotiator
-            .negotiate_step(&RStr::from_str(&demand), &RStr::from_str(&offer))
+            .negotiate_step(
+                &RStr::from_str(&demand),
+                &RStr::from_str(&offer),
+                &RStr::from_str(&score),
+            )
             .into_result()
             .map_err(|e| SharedLibError::Negotiation(e.into_string()))?;
 

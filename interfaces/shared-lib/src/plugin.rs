@@ -11,7 +11,7 @@ use crate::SharedLibError;
 pub use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent,
+    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
 
 pub trait NegotiatorConstructor<T: NegotiatorComponent + Sync + Send + Sized>: Sync + Send {
@@ -52,14 +52,20 @@ impl<T> SharedNegotiatorAPI for NegotiatorWrapper<T>
 where
     T: NegotiatorComponent + NegotiatorConstructor<T> + Sized,
 {
-    fn negotiate_step(&mut self, demand: &RStr, offer: &RStr) -> RResult<RString, RString> {
+    fn negotiate_step(
+        &mut self,
+        demand: &RStr,
+        offer: &RStr,
+        score: &RStr,
+    ) -> RResult<RString, RString> {
         match (|| {
             let demand = serde_json::from_str(demand.as_str()).map_err(SharedLibError::from)?;
             let offer = serde_json::from_str(offer.as_str()).map_err(SharedLibError::from)?;
+            let score = serde_json::from_str(score.as_str()).map_err(SharedLibError::from)?;
 
             let result = self
                 .component
-                .negotiate_step(&demand, offer)
+                .negotiate_step(&demand, offer, score)
                 .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
 
             Result::<String, SharedLibError>::Ok(

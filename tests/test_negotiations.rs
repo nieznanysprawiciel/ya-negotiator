@@ -44,7 +44,7 @@ fn example_offer() -> OfferTemplate {
 fn example_demand(deadline: DateTime<Utc>, subnet: &str) -> NewDemand {
     let ts = deadline.timestamp_millis();
     let properties = serde_json::json!({
-        "golem.node.id.name": "interactive-example",
+        "golem.node.id.name": "example-node",
         "golem.node.debug.subnet": subnet,
         "golem.srv.comp.task_package": "package".to_string(),
         "golem.srv.comp.expiration": ts

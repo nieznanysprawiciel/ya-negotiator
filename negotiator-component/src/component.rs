@@ -3,6 +3,23 @@ use serde::{Deserialize, Serialize};
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
 
+/// Structure for exchanging Proposal evaluation score.
+/// Each `NegotiatorComponent` can add it's own score value the same way,
+/// as it adds properties to Proposal. `NegotiatorComponents` can read scores returned
+/// by previous components and base it's results on it (Note that component can never
+/// be sure, that any score will be returned by previous components).
+///
+/// `NegotiatorComponent` is allowed to add as many score values (or other additional information)
+/// as he wants. Each component defines himself under what names these scores will be placed in
+/// `Score` structure (so namespacing is encouraged).
+/// Property `final-score` has special meaning and will be used by `CompositeNegotiator` to
+/// choose between Proposals and Agreements.
+///
+/// We use the same structure for scoring Proposals as for negotiating
+/// them. We don't need constraints part here, but this structure has many utils
+/// useful for properties manipulation, that I don't want to duplicate its functionality.
+pub type Score = OfferTemplate;
+
 /// Result returned by `NegotiatorComponent` during Proposals evaluation.
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum NegotiationResult {
@@ -13,10 +30,16 @@ pub enum NegotiationResult {
     /// On Requestor side returning this type means, that Proposal will be proposed
     /// to Provider. On Provider side it doesn't have any consequences, since Provider
     /// doesn't have initiative to propose Agreements.
-    Ready { proposal: ProposalView },
+    Ready {
+        proposal: ProposalView,
+        score: Score,
+    },
     /// Proposal is not ready to become Agreement, but negotiations
     /// are in progress.
-    Negotiating { proposal: ProposalView },
+    Negotiating {
+        proposal: ProposalView,
+        score: Score,
+    },
     /// Proposal is not acceptable and should be rejected.
     /// Negotiations can't be continued.
     Reject { reason: Option<Reason> },
@@ -47,7 +70,7 @@ pub enum AgreementResult {
 /// It would be useful to have `NegotiatorComponents`, that can be loaded from shared library
 /// or can communicate with negotiation logic in external process (maybe RPC or TCP??).
 pub trait NegotiatorComponent {
-    /// Push forward negotiations as far as you can.
+    /// Push forward negotiations as far as you can. Evaluate Proposal.
     /// `NegotiatorComponent` should modify only properties in his responsibility
     /// and return remaining part of Proposal unchanged.
     ///
@@ -60,6 +83,7 @@ pub trait NegotiatorComponent {
         &mut self,
         incoming_proposal: &ProposalView,
         template: ProposalView,
+        score: Score,
     ) -> anyhow::Result<NegotiationResult>;
 
     /// Called during Offer/Demand creation. `NegotiatorComponent` should add properties

@@ -1,5 +1,7 @@
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
-use ya_negotiator_component::component::{AgreementResult, NegotiationResult, NegotiatorComponent};
+use ya_negotiator_component::component::{
+    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
+};
 
 /// Negotiator that accepts every incoming Proposal.
 pub struct AcceptAll {}
@@ -15,8 +17,12 @@ impl NegotiatorComponent for AcceptAll {
         &mut self,
         _demand: &ProposalView,
         offer: ProposalView,
+        score: Score,
     ) -> anyhow::Result<NegotiationResult> {
-        Ok(NegotiationResult::Ready { proposal: offer })
+        Ok(NegotiationResult::Ready {
+            proposal: offer,
+            score,
+        })
     }
 
     fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate> {

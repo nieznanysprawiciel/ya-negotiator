@@ -17,6 +17,6 @@ pub mod builtin {
 pub mod component {
     pub use ya_agreement_utils::ProposalView;
     pub use ya_negotiator_component::{
-        AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack,
+        AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack, Score,
     };
 }

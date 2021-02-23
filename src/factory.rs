@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::negotiators::NegotiatorAddr;
-use crate::CompositeNegotiator;
+use crate::Negotiator;
 
 use ya_negotiator_shared_lib_interface::SharedLibNegotiator;
 
@@ -14,6 +14,7 @@ use ya_negotiator_component::NegotiatorsPack;
 use crate::builtin::AcceptAll;
 use crate::builtin::LimitExpiration;
 use crate::builtin::MaxAgreements;
+use crate::composite::NegotiatorCallbacks;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[non_exhaustive]
@@ -34,7 +35,9 @@ pub struct NegotiatorsConfig {
     pub negotiators: Vec<NegotiatorConfig>,
 }
 
-pub fn create_negotiator(config: NegotiatorsConfig) -> anyhow::Result<Arc<NegotiatorAddr>> {
+pub fn create_negotiator(
+    config: NegotiatorsConfig,
+) -> anyhow::Result<(Arc<NegotiatorAddr>, NegotiatorCallbacks)> {
     let mut components = NegotiatorsPack::new();
     for config in config.negotiators.into_iter() {
         let name = config.name;
@@ -46,9 +49,8 @@ pub fn create_negotiator(config: NegotiatorsConfig) -> anyhow::Result<Arc<Negoti
         components = components.add_component(&name, negotiator);
     }
 
-    Ok(Arc::new(NegotiatorAddr::from(CompositeNegotiator::new(
-        components,
-    ))))
+    let (negotiator, callbacks) = Negotiator::new(components);
+    Ok((Arc::new(NegotiatorAddr::from(negotiator)), callbacks))
 }
 
 pub fn create_builtin(

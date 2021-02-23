@@ -1,16 +1,19 @@
 use anyhow::*;
+use chrono::{Duration, Utc};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-
-use chrono::{Duration, Utc};
 use std::sync::Arc;
+use tokio::sync::broadcast;
+
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_client_model::market::agreement::State as AgreementState;
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{Agreement, Demand, DemandOfferBase, Offer, Proposal};
 use ya_client_model::NodeId;
 use ya_negotiators::factory::{create_negotiator, NegotiatorsConfig};
-use ya_negotiators::{AgreementResponse, AgreementResult, NegotiatorAddr, ProposalResponse};
+use ya_negotiators::{
+    AgreementAction, AgreementResult, NegotiatorAddr, NegotiatorCallbacks, ProposalAction,
+};
 
 pub enum NodeType {
     Provider,
@@ -21,18 +24,55 @@ pub struct Node {
     pub negotiator: Arc<NegotiatorAddr>,
     pub node_id: NodeId,
     pub node_type: NodeType,
+
+    pub agreement_sender: broadcast::Sender<(NodeId, AgreementAction)>,
+    pub proposal_sender: broadcast::Sender<(NodeId, ProposalAction)>,
 }
 
 impl Node {
-    pub fn new(config: NegotiatorsConfig, node_type: NodeType) -> anyhow::Result<Node> {
-        let negotiator = create_negotiator(config)?;
+    pub fn new(config: NegotiatorsConfig, node_type: NodeType) -> anyhow::Result<Arc<Node>> {
+        let (negotiator, callbacks) = create_negotiator(config)?;
         let node_id = generate_identity();
 
-        Ok(Node {
-            node_id,
+        let (agreement_sender, _) = broadcast::channel(16);
+        let (proposal_sender, _) = broadcast::channel(16);
+
+        let node = Node {
+            node_id: node_id.clone(),
             negotiator,
             node_type,
-        })
+            proposal_sender: proposal_sender.clone(),
+            agreement_sender: agreement_sender.clone(),
+        };
+
+        let NegotiatorCallbacks {
+            proposal_channel: mut proposal,
+            agreement_channel: mut agreement,
+        } = callbacks;
+
+        let id = node_id.clone();
+        tokio::task::spawn_local(async move {
+            while let Some(action) = proposal.recv().await {
+                proposal_sender.send((id, action)).ok();
+            }
+        });
+
+        let id = node_id.clone();
+        tokio::task::spawn_local(async move {
+            while let Some(action) = agreement.recv().await {
+                agreement_sender.send((id, action)).ok();
+            }
+        });
+
+        Ok(Arc::new(node))
+    }
+
+    pub fn agreement_channel(&self) -> broadcast::Receiver<(NodeId, AgreementAction)> {
+        self.agreement_sender.subscribe()
+    }
+
+    pub fn proposal_channel(&self) -> broadcast::Receiver<(NodeId, ProposalAction)> {
+        self.proposal_sender.subscribe()
     }
 
     pub async fn create_offer(&self, template: &OfferTemplate) -> Result<Proposal> {
@@ -49,16 +89,13 @@ impl Node {
         &self,
         incoming_proposal: &Proposal,
         our_prev_proposal: &Proposal,
-    ) -> Result<ProposalResponse> {
+    ) -> Result<()> {
         self.negotiator
             .react_to_proposal(incoming_proposal, our_prev_proposal)
             .await
     }
 
-    pub async fn react_to_agreement(
-        &self,
-        agreement_view: &AgreementView,
-    ) -> Result<AgreementResponse> {
+    pub async fn react_to_agreement(&self, agreement_view: &AgreementView) -> Result<()> {
         self.negotiator.react_to_agreement(agreement_view).await
     }
 

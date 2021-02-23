@@ -21,20 +21,21 @@ ya-negotiator-component = { path = "negotiator-component" }
 ya-builtin-negotiators = { path = "builtin-negotiators" }
 ya-negotiator-shared-lib-interface = { path = "interfaces/shared-lib" }
 
-ya-client-model = "^0.2"
+ya-client-model = "0.2"
 
 actix = { version = "0.10" }
 actix-rt = "1.1.1"
-actix_derive = "^0.5.0"
-anyhow = "^1.0"
+actix_derive = "0.5.0"
+anyhow = "1.0"
 derive_more = "0.99.11"
-serde = "^1.0"
-serde_json = "^1.0"
-serde_yaml = "^0.8"
-thiserror = "^1.0"
+serde = "1.0"
+serde_json = "1.0"
+serde_yaml = "0.8"
+thiserror = "1.0"
+tokio = { version = "1.1", features = ["sync"] }
 
 [dev-dependencies]
-chrono = "^0.4.10"
+chrono = "0.4.10"
 ya-negotiators-testing = { path = "testing" }
 # Test will link this library dynamically
 dll-negotiator = { path = "examples/dll-negotiator" }

@@ -2,29 +2,67 @@ use actix::{Actor, Context, Handler};
 use anyhow::anyhow;
 use serde_json::Value;
 use std::convert::TryFrom;
+use tokio::sync::mpsc;
 
-use ya_client_model::market::{NewOffer, Reason};
+use ya_client_model::market::{NewOffer, NewProposal, Reason};
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
+use crate::negotiators::{AgreementAction, ProposalAction};
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
-use crate::negotiators::{AgreementResponse, Negotiator, ProposalResponse};
 use crate::NegotiatorsPack;
 
 use ya_agreement_utils::agreement::{expand, flatten};
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
-/// Negotiator that can limit number of running agreements.
-pub struct CompositeNegotiator {
+/// Actor implementing Negotiation logic.
+///
+/// Direction:
+/// - Negotiator should asynchronously generate negotiation decisions instead
+///   of returning them as direct response to incoming events. This would allow use
+///   to implement time dependent logic like: Collect Proposals during `n` seconds
+///   and choose the best from them.
+/// - Extensibility: we expect, that developers will implement different market strategies.
+///   In best case they should be able to do this without modifying `ya-provider` code.
+///   This mean we should implement plugin-like system to communicate with external applications/code.
+/// - Multiple negotiating plugins cooperating with each other. Note that introducing new features to
+///   Agreement specification requires implementing separate negotiation logic. In this case we
+///   can end up with explosion of combination to implement. What worse, we will force external
+///   developers to adjust their logic to new Agreement features each time, when they appear.
+///   To avoid this we should design internal interfaces, which will allow to combine multiple logics
+///   as plugable components.
+pub struct Negotiator {
     components: NegotiatorsPack,
+
+    proposal_channel: mpsc::UnboundedSender<ProposalAction>,
+    agreement_channel: mpsc::UnboundedSender<AgreementAction>,
 }
 
-impl CompositeNegotiator {
-    pub fn new(components: NegotiatorsPack) -> CompositeNegotiator {
-        CompositeNegotiator { components }
+pub struct NegotiatorCallbacks {
+    pub proposal_channel: mpsc::UnboundedReceiver<ProposalAction>,
+    pub agreement_channel: mpsc::UnboundedReceiver<AgreementAction>,
+}
+
+impl Negotiator {
+    pub fn new(components: NegotiatorsPack) -> (Negotiator, NegotiatorCallbacks) {
+        let (proposal_sender, proposal_receiver) = mpsc::unbounded_channel();
+        let (agreement_sender, agreement_receiver) = mpsc::unbounded_channel();
+
+        let negotiator = Negotiator {
+            components,
+            proposal_channel: proposal_sender,
+            agreement_channel: agreement_sender,
+        };
+
+        let callbacks = NegotiatorCallbacks {
+            proposal_channel: proposal_receiver,
+            agreement_channel: agreement_receiver,
+        };
+
+        return (negotiator, callbacks);
     }
 }
 
-impl Handler<CreateOffer> for CompositeNegotiator {
+impl Handler<CreateOffer> for Negotiator {
     type Result = anyhow::Result<NewOffer>;
 
     fn handle(&mut self, msg: CreateOffer, _: &mut Context<Self>) -> Self::Result {
@@ -36,8 +74,8 @@ impl Handler<CreateOffer> for CompositeNegotiator {
     }
 }
 
-impl Handler<ReactToProposal> for CompositeNegotiator {
-    type Result = anyhow::Result<ProposalResponse>;
+impl Handler<ReactToProposal> for Negotiator {
+    type Result = anyhow::Result<()>;
 
     fn handle(&mut self, msg: ReactToProposal, _: &mut Context<Self>) -> Self::Result {
         let proposal = ProposalView::try_from(&msg.incoming_proposal)?;
@@ -54,18 +92,32 @@ impl Handler<ReactToProposal> for CompositeNegotiator {
             .components
             .negotiate_step(&proposal, template, Score::default())?;
         match result {
-            NegotiationResult::Reject { reason } => Ok(ProposalResponse::RejectProposal { reason }),
-            NegotiationResult::Ready { .. } => Ok(ProposalResponse::AcceptProposal),
+            NegotiationResult::Reject { reason } => {
+                self.proposal_channel.send(ProposalAction::RejectProposal {
+                    id: proposal.id.clone(),
+                    reason,
+                })?;
+            }
+            NegotiationResult::Ready { .. } => {
+                self.proposal_channel.send(ProposalAction::AcceptProposal {
+                    id: proposal.id.clone(),
+                })?;
+            }
             NegotiationResult::Negotiating {
                 proposal: template, ..
             } => {
-                let offer = NewOffer {
+                let offer = NewProposal {
                     properties: serde_json::Value::Object(flatten(template.content.properties)),
                     constraints: template.content.constraints,
                 };
-                Ok(ProposalResponse::CounterProposal { offer })
+                self.proposal_channel
+                    .send(ProposalAction::CounterProposal {
+                        id: proposal.id.clone(),
+                        proposal: offer,
+                    })?;
             }
         }
+        Ok(())
     }
 }
 
@@ -107,10 +159,11 @@ pub fn to_proposal_views(
     Ok((demand_proposal, offer_proposal))
 }
 
-impl Handler<ReactToAgreement> for CompositeNegotiator {
-    type Result = anyhow::Result<AgreementResponse>;
+impl Handler<ReactToAgreement> for Negotiator {
+    type Result = anyhow::Result<()>;
 
     fn handle(&mut self, msg: ReactToAgreement, _: &mut Context<Self>) -> Self::Result {
+        let agreement_id = msg.agreement.id.clone();
         let (demand_proposal, offer_proposal) =
             to_proposal_views(msg.agreement.clone()).map_err(|e| {
                 anyhow!(
@@ -127,19 +180,29 @@ impl Handler<ReactToAgreement> for CompositeNegotiator {
         {
             NegotiationResult::Ready { .. } => {
                 self.components.on_agreement_approved(&msg.agreement).ok();
-                Ok(AgreementResponse::ApproveAgreement)
+                self.agreement_channel
+                    .send(AgreementAction::ApproveAgreement { id: agreement_id })?;
             }
             NegotiationResult::Reject { reason } => {
-                Ok(AgreementResponse::RejectAgreement { reason })
+                self.agreement_channel
+                    .send(AgreementAction::RejectAgreement {
+                        id: agreement_id,
+                        reason,
+                    })?;
             }
-            NegotiationResult::Negotiating { .. } => Ok(AgreementResponse::RejectAgreement {
-                reason: Some(Reason::new("Negotiations aren't finished.")),
-            }),
+            NegotiationResult::Negotiating { .. } => {
+                self.agreement_channel
+                    .send(AgreementAction::RejectAgreement {
+                        id: agreement_id,
+                        reason: Some(Reason::new("Negotiations aren't finished.")),
+                    })?;
+            }
         }
+        Ok(())
     }
 }
 
-impl Handler<AgreementFinalized> for CompositeNegotiator {
+impl Handler<AgreementFinalized> for Negotiator {
     type Result = anyhow::Result<()>;
 
     fn handle(&mut self, msg: AgreementFinalized, _: &mut Context<Self>) -> Self::Result {
@@ -148,7 +211,6 @@ impl Handler<AgreementFinalized> for CompositeNegotiator {
     }
 }
 
-impl Negotiator for CompositeNegotiator {}
-impl Actor for CompositeNegotiator {
+impl Actor for Negotiator {
     type Context = Context<Self>;
 }

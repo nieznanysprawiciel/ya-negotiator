@@ -5,4 +5,6 @@ mod provider;
 mod requestor;
 
 pub use framework::Framework;
-pub use negotiation_record::{NegotiationRecord, NegotiationResult, NegotiationStage, NodePair};
+pub use negotiation_record::{
+    NegotiationRecordSync, NegotiationResult, NegotiationStage, NodePair,
+};

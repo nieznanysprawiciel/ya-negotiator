@@ -1,14 +1,9 @@
-use ya_agreement_utils::{AgreementView, OfferTemplate};
-use ya_negotiators::factory::*;
-use ya_negotiators::{AgreementAction, AgreementResult, ProposalAction};
+use ya_agreement_utils::AgreementView;
+use ya_negotiators::{AgreementAction, ProposalAction};
 
-use ya_client_model::market::proposal::State;
-use ya_client_model::market::{Agreement, DemandOfferBase, NewProposal, Proposal, Reason};
+use ya_client_model::market::{Agreement, NewProposal, Proposal, Reason};
 use ya_client_model::NodeId;
 
-use crate::node::{Node, NodeType};
-
-use anyhow::anyhow;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -19,10 +14,11 @@ use std::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NegotiationStage {
-    Initial,
     Proposal { last_response: ProposalAction },
     Agreement { last_response: AgreementAction },
     Error(String),
+    InfiniteLoop,
+    Timeout,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -36,16 +32,24 @@ pub struct NegotiationResult {
 pub struct NodePair(NodeId, NodeId);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NegotiationRecordImpl {
+pub struct NegotiationRecord {
     pub results: HashMap<NodePair, NegotiationResult>,
     pub proposals: HashMap<String, Proposal>,
     pub agreements: HashMap<String, Agreement>,
 }
 
 #[derive(Clone, Debug)]
-pub struct NegotiationRecord(Arc<Mutex<NegotiationRecordImpl>>);
+pub struct NegotiationRecordSync(pub Arc<Mutex<NegotiationRecord>>);
 
-impl NegotiationRecord {
+impl NegotiationRecordSync {
+    pub fn new() -> NegotiationRecordSync {
+        NegotiationRecordSync(Arc::new(Mutex::new(NegotiationRecord {
+            results: Default::default(),
+            proposals: Default::default(),
+            agreements: Default::default(),
+        })))
+    }
+
     pub fn error(&self, owner_node: NodeId, with_node: NodeId, e: anyhow::Error) {
         let mut record = self.0.lock().unwrap();
         let negotiation = record
@@ -62,8 +66,8 @@ impl NegotiationRecord {
         let mut record = self.0.lock().unwrap();
         let negotiation = record
             .results
-            .get_mut(&NodePair(counter_proposal.issuer_id, with_node))
-            .unwrap();
+            .entry(NodePair(counter_proposal.issuer_id, with_node))
+            .or_insert(NegotiationResult::new());
 
         negotiation.stage.push(NegotiationStage::Proposal {
             last_response: ProposalAction::AcceptProposal {
@@ -71,6 +75,7 @@ impl NegotiationRecord {
             },
         });
 
+        negotiation.proposals.push(counter_proposal.clone());
         record
             .proposals
             .insert(counter_proposal.proposal_id.clone(), counter_proposal);
@@ -80,8 +85,8 @@ impl NegotiationRecord {
         let mut record = self.0.lock().unwrap();
         let negotiation = record
             .results
-            .get_mut(&NodePair(counter_proposal.issuer_id, with_node))
-            .unwrap();
+            .entry(NodePair(counter_proposal.issuer_id, with_node))
+            .or_insert(NegotiationResult::new());
 
         negotiation.stage.push(NegotiationStage::Proposal {
             last_response: ProposalAction::CounterProposal {
@@ -93,6 +98,7 @@ impl NegotiationRecord {
             },
         });
 
+        negotiation.proposals.push(counter_proposal.clone());
         record
             .proposals
             .insert(counter_proposal.proposal_id.clone(), counter_proposal);
@@ -102,8 +108,8 @@ impl NegotiationRecord {
         let mut record = self.0.lock().unwrap();
         let negotiation = record
             .results
-            .get_mut(&NodePair(owner_node, rejected_proposal.issuer_id))
-            .unwrap();
+            .entry(NodePair(owner_node, rejected_proposal.issuer_id))
+            .or_insert(NegotiationResult::new());
 
         negotiation.stage.push(NegotiationStage::Proposal {
             last_response: ProposalAction::RejectProposal {
@@ -113,12 +119,15 @@ impl NegotiationRecord {
         });
     }
 
-    pub fn approve(&self, owner_node: NodeId, with_node: NodeId, agreement: Agreement) {
+    pub fn approve(&self, agreement: Agreement) {
         let mut record = self.0.lock().unwrap();
         let negotiation = record
             .results
-            .get_mut(&NodePair(owner_node, with_node))
-            .unwrap();
+            .entry(NodePair(
+                agreement.requestor_id().clone(),
+                agreement.provider_id().clone(),
+            ))
+            .or_insert(NegotiationResult::new());
 
         negotiation.stage.push(NegotiationStage::Agreement {
             last_response: AgreementAction::ApproveAgreement {
@@ -126,9 +135,28 @@ impl NegotiationRecord {
             },
         });
 
+        negotiation.agreement = Some(AgreementView::try_from(&agreement).unwrap());
         record
             .agreements
             .insert(agreement.agreement_id.clone(), agreement);
+    }
+
+    pub fn reject_agreement(&self, agreement: Agreement, reason: Option<Reason>) {
+        let mut record = self.0.lock().unwrap();
+        let negotiation = record
+            .results
+            .entry(NodePair(
+                agreement.requestor_id().clone(),
+                agreement.provider_id().clone(),
+            ))
+            .or_insert(NegotiationResult::new());
+
+        negotiation.stage.push(NegotiationStage::Agreement {
+            last_response: AgreementAction::RejectAgreement {
+                id: agreement.agreement_id.clone(),
+                reason,
+            },
+        });
     }
 
     pub fn get_proposal(&self, id: &String) -> Option<Proposal> {
@@ -137,6 +165,14 @@ impl NegotiationRecord {
 
     pub fn get_agreement(&self, id: &String) -> Option<Agreement> {
         self.0.lock().unwrap().agreements.get(id).cloned()
+    }
+
+    pub fn add_proposal(&self, proposal: Proposal) {
+        self.0
+            .lock()
+            .unwrap()
+            .proposals
+            .insert(proposal.proposal_id.clone(), proposal);
     }
 }
 
@@ -192,10 +228,16 @@ impl fmt::Display for NegotiationResult {
 
 impl fmt::Display for NegotiationRecord {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(
-            f,
-            "{}",
-            serde_json::to_string_pretty(&(*self.0.lock().unwrap())).unwrap()
-        )
+        write!(f, "{}", serde_json::to_string_pretty(&self).unwrap())
+    }
+}
+
+impl NegotiationResult {
+    pub fn new() -> NegotiationResult {
+        NegotiationResult {
+            stage: vec![],
+            proposals: vec![],
+            agreement: None,
+        }
     }
 }

@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 use ya_client_model::market::{NewOffer, NewProposal, Reason};
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
-use crate::negotiators::{AgreementAction, ProposalAction};
+use crate::negotiators::{AgreementAction, AgreementSigned, ProposalAction};
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::NegotiatorsPack;
 
@@ -179,7 +179,6 @@ impl Handler<ReactToAgreement> for Negotiator {
             .negotiate_step(&demand_proposal, offer_proposal, Score::default())?
         {
             NegotiationResult::Ready { .. } => {
-                self.components.on_agreement_approved(&msg.agreement).ok();
                 self.agreement_channel
                     .send(AgreementAction::ApproveAgreement { id: agreement_id })?;
             }
@@ -199,6 +198,14 @@ impl Handler<ReactToAgreement> for Negotiator {
             }
         }
         Ok(())
+    }
+}
+
+impl Handler<AgreementSigned> for Negotiator {
+    type Result = anyhow::Result<()>;
+
+    fn handle(&mut self, msg: AgreementSigned, _: &mut Context<Self>) -> Self::Result {
+        self.components.on_agreement_approved(&msg.agreement)
     }
 }
 

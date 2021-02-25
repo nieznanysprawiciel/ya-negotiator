@@ -75,6 +75,13 @@ pub struct ReactToAgreement {
     pub agreement: AgreementView,
 }
 
+/// Agreement was successfully signed by both parties.
+#[derive(Message)]
+#[rtype(result = "Result<()>")]
+pub struct AgreementSigned {
+    pub agreement: AgreementView,
+}
+
 /// Agreement finished notifications. Negotiator can adjust his strategy based on it.
 #[derive(Message)]
 #[rtype(result = "Result<()>")]
@@ -89,6 +96,7 @@ pub struct NegotiatorAddr {
     pub on_finalized: Recipient<AgreementFinalized>,
     pub on_proposal: Recipient<ReactToProposal>,
     pub on_agreement: Recipient<ReactToAgreement>,
+    pub on_agreement_signed: Recipient<AgreementSigned>,
 }
 
 impl NegotiatorAddr {
@@ -121,6 +129,14 @@ impl NegotiatorAddr {
             .await?
     }
 
+    pub async fn agreement_signed(&self, agreement_view: &AgreementView) -> Result<()> {
+        self.on_agreement_signed
+            .send(AgreementSigned {
+                agreement: agreement_view.clone(),
+            })
+            .await?
+    }
+
     pub async fn agreement_finalized(
         &self,
         agreement_id: &str,
@@ -140,7 +156,8 @@ impl NegotiatorAddr {
             on_create: addr.clone().recipient(),
             on_finalized: addr.clone().recipient(),
             on_proposal: addr.clone().recipient(),
-            on_agreement: addr.recipient(),
+            on_agreement: addr.clone().recipient(),
+            on_agreement_signed: addr.clone().recipient(),
         }
     }
 }

@@ -1,31 +1,24 @@
-use ya_agreement_utils::{AgreementView, OfferTemplate};
-use ya_negotiators::factory::*;
-use ya_negotiators::{AgreementAction, AgreementResult, ProposalAction};
+use ya_agreement_utils::AgreementView;
+use ya_negotiators::{AgreementAction, ProposalAction};
 
 use ya_client_model::market::proposal::State;
-use ya_client_model::market::{DemandOfferBase, NewProposal, Proposal, Reason};
+use ya_client_model::market::{NewProposal, Reason};
 use ya_client_model::NodeId;
 
-use crate::negotiation_record::{NegotiationRecord, NegotiationResult, NegotiationStage};
-use crate::node::{Node, NodeType};
+use crate::negotiation_record::NegotiationRecordSync;
+use crate::node::Node;
 
-use anyhow::{anyhow, Error};
-use futures::future::join_all;
 use futures::stream::select_all;
 use futures::StreamExt;
-use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::fmt;
 use std::sync::Arc;
-use tokio::sync::broadcast::Receiver;
-use tokio::sync::Mutex;
 use tokio_stream::wrappers::BroadcastStream;
 
 pub struct RequestorReactions {
     pub providers: HashMap<NodeId, Arc<Node>>,
     pub requestors: HashMap<NodeId, Arc<Node>>,
-    pub record: NegotiationRecord,
+    pub record: NegotiationRecordSync,
 }
 
 impl RequestorReactions {
@@ -90,7 +83,7 @@ impl RequestorReactions {
     }
 
     /// Approve Agreement on Requestor side means, that Agreement will be confirmed
-    /// (and send to Provider).
+    /// (and sent to Provider).
     pub async fn approve_agreement(&self, node_id: NodeId, agreement_id: String) {
         let record = self.record.clone();
         let agreement = record.get_agreement(&agreement_id).unwrap();
@@ -99,7 +92,7 @@ impl RequestorReactions {
 
         let view = AgreementView::try_from(&agreement).unwrap();
 
-        record.approve(node_id, agreement.provider_id().clone(), agreement);
+        record.approve(agreement);
 
         if let Err(e) = provider.react_to_agreement(&view).await {
             record.error(provider_id, node_id, e.into());
@@ -108,18 +101,21 @@ impl RequestorReactions {
 
     pub async fn reject_agreement(
         &self,
-        node_id: NodeId,
+        _node_id: NodeId,
         agreement_id: String,
         reason: Option<Reason>,
     ) {
         let record = self.record.clone();
+        let agreement = record.get_agreement(&agreement_id).unwrap();
+
+        record.reject_agreement(agreement, reason);
     }
 }
 
-async fn requestor_proposals_processor(
+pub async fn requestor_proposals_processor(
     providers: HashMap<NodeId, Arc<Node>>,
     requestors: HashMap<NodeId, Arc<Node>>,
-    record: NegotiationRecord,
+    record: NegotiationRecordSync,
 ) {
     let mut r_receivers = select_all(
         requestors
@@ -147,10 +143,10 @@ async fn requestor_proposals_processor(
     }
 }
 
-async fn requestor_agreements_processor(
+pub async fn requestor_agreements_processor(
     providers: HashMap<NodeId, Arc<Node>>,
     requestors: HashMap<NodeId, Arc<Node>>,
-    record: NegotiationRecord,
+    record: NegotiationRecordSync,
 ) {
     let mut r_receivers = select_all(
         requestors

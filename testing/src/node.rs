@@ -99,6 +99,10 @@ impl Node {
         self.negotiator.react_to_agreement(agreement_view).await
     }
 
+    pub async fn agreement_signed(&self, agreement_view: &AgreementView) -> Result<()> {
+        self.negotiator.agreement_signed(agreement_view).await
+    }
+
     pub async fn agreement_finalized(
         &self,
         agreement_id: &str,

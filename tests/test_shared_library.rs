@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
 use ya_negotiators::factory::*;
-use ya_negotiators::ProposalAction;
+use ya_negotiators::{NegotiatorCallbacks, ProposalAction};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewDemand, Proposal};
@@ -87,7 +87,13 @@ fn proposal_from_demand(demand: &NewDemand) -> Proposal {
 #[actix_rt::test]
 async fn test_shared_library() {
     let config = example_config();
-    let negotiator = create_negotiator(config).unwrap();
+    let (
+        negotiator,
+        NegotiatorCallbacks {
+            proposal_channel: mut proposals,
+            agreement_channel: _agreements,
+        },
+    ) = create_negotiator(config).unwrap();
 
     let offer = negotiator
         .create_offer(&example_offer_definition())
@@ -98,13 +104,13 @@ async fn test_shared_library() {
     let demand = example_demand(Utc::now() + chrono::Duration::seconds(50), "dany");
     let proposal = proposal_from_demand(&demand);
 
-    let result = negotiator
+    negotiator
         .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 
-    match result {
-        ProposalAction::RejectProposal { .. } => {}
+    match proposals.recv().await {
+        Some(ProposalAction::RejectProposal { .. }) => {}
         _ => panic!("Expected reject proposal"),
     }
 
@@ -112,13 +118,13 @@ async fn test_shared_library() {
     let demand = example_demand(Utc::now() + chrono::Duration::seconds(900), "node-1");
     let proposal = proposal_from_demand(&demand);
 
-    let result = negotiator
+    negotiator
         .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 
-    match result {
-        ProposalAction::AcceptProposal { .. } => {}
+    match proposals.recv().await {
+        Some(ProposalAction::AcceptProposal { .. }) => {}
         _ => panic!("Expected AcceptProposal"),
     }
 }

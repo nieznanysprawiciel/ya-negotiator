@@ -3,7 +3,7 @@ use chrono::{DateTime, Utc};
 use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
 use ya_builtin_negotiators::*;
 use ya_negotiators::factory::*;
-use ya_negotiators::ProposalAction;
+use ya_negotiators::{NegotiatorCallbacks, ProposalAction};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::NewDemand;
@@ -74,7 +74,13 @@ fn proposal_from_demand(demand: &NewDemand) -> Proposal {
 #[actix_rt::test]
 async fn test_negotiation() {
     let config = example_config();
-    let negotiator = create_negotiator(config).unwrap();
+    let (
+        negotiator,
+        NegotiatorCallbacks {
+            proposal_channel: mut proposals,
+            agreement_channel: _agreements,
+        },
+    ) = create_negotiator(config).unwrap();
 
     let offer = negotiator.create_offer(&example_offer()).await.unwrap();
     let offer = proposal_from_demand(&offer);
@@ -82,13 +88,13 @@ async fn test_negotiation() {
     let demand = example_demand(Utc::now() + chrono::Duration::seconds(50), "net-1");
     let proposal = proposal_from_demand(&demand);
 
-    let result = negotiator
+    negotiator
         .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 
-    match result {
-        ProposalAction::AcceptProposal { .. } => {}
+    match proposals.recv().await {
+        Some(ProposalAction::AcceptProposal { .. }) => {}
         _ => panic!("Expected AcceptProposal"),
     }
 
@@ -96,13 +102,13 @@ async fn test_negotiation() {
     let demand = example_demand(Utc::now() + chrono::Duration::seconds(900), "net-1");
     let proposal = proposal_from_demand(&demand);
 
-    let result = negotiator
+    negotiator
         .react_to_proposal(&proposal, &offer)
         .await
         .unwrap();
 
-    match result {
-        ProposalAction::RejectProposal { .. } => {}
+    match proposals.recv().await {
+        Some(ProposalAction::RejectProposal { .. }) => {}
         _ => panic!("Expected reject proposal"),
     }
 }

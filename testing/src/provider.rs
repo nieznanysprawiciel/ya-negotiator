@@ -158,6 +158,10 @@ pub async fn provider_proposals_processor(
             ProposalAction::RejectProposal { id, reason } => {
                 reactions.reject_proposal(node_id, id, reason).await
             }
+        };
+
+        if record.is_finished() {
+            break;
         }
     }
 }
@@ -188,6 +192,10 @@ pub async fn provider_agreements_processor(
             AgreementAction::RejectAgreement { id, reason } => {
                 reactions.reject_agreement(node_id, id, reason).await
             }
+        };
+
+        if record.is_finished() {
+            break;
         }
     }
 }

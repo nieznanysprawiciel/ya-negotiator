@@ -69,11 +69,11 @@ async fn test_requestor_provider_flow() {
         .unwrap();
 
     println!("{:#?}", result);
-    framework
-        .run_finalize_agreement(
-            &result.agreement.unwrap(),
-            AgreementResult::ClosedByRequestor,
-        )
-        .await
-        .unwrap();
+    // framework
+    //     .run_finalize_agreement(
+    //         &result.agreement.unwrap(),
+    //         AgreementResult::ClosedByRequestor,
+    //     )
+    //     .await
+    //     .unwrap();
 }

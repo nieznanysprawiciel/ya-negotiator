@@ -51,14 +51,14 @@ impl Node {
         } = callbacks;
 
         let id = node_id.clone();
-        tokio::task::spawn_local(async move {
+        tokio::task::spawn(async move {
             while let Some(action) = proposal.recv().await {
                 proposal_sender.send((id, action)).ok();
             }
         });
 
         let id = node_id.clone();
-        tokio::task::spawn_local(async move {
+        tokio::task::spawn(async move {
             while let Some(action) = agreement.recv().await {
                 agreement_sender.send((id, action)).ok();
             }

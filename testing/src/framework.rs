@@ -1,4 +1,4 @@
-use ya_agreement_utils::OfferTemplate;
+use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_negotiators::factory::*;
 
 use ya_client_model::NodeId;
@@ -14,6 +14,7 @@ use std::fmt;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
 use ya_client_model::market::Proposal;
+use ya_negotiators::AgreementResult;
 
 #[derive(thiserror::Error)]
 #[error("{error}\nNegotiation traceback:\n\n{negotiation_traceback}")]
@@ -65,7 +66,7 @@ impl Framework {
         demand: OfferTemplate,
         offer: OfferTemplate,
     ) -> Result<NegotiationRecord, FrameworkError> {
-        let record = NegotiationRecordSync::new();
+        let record = NegotiationRecordSync::new(30);
 
         let mut offers = vec![];
         for (_, provider) in &self.providers {
@@ -148,26 +149,26 @@ impl Framework {
         ]
     }
 
-    //     pub async fn run_finalize_agreement(
-    //         &self,
-    //         agreement: &AgreementView,
-    //         result: AgreementResult,
-    //     ) -> anyhow::Result<()> {
-    //         // First call both functions and resolve errors later. We don't want
-    //         // to omit any of these calls.
-    //         let prov_result = self
-    //             .requestor
-    //             .agreement_finalized(&agreement.id, result.clone())
-    //             .await;
-    //         let req_result = self
-    //             .provider
-    //             .agreement_finalized(&agreement.id, result)
-    //             .await;
+    // pub async fn run_finalize_agreement(
+    //     &self,
+    //     agreement: &AgreementView,
+    //     result: AgreementResult,
+    // ) -> anyhow::Result<()> {
+    //     // First call both functions and resolve errors later. We don't want
+    //     // to omit any of these calls.
+    //     let prov_result = self
+    //         .requestor
+    //         .agreement_finalized(&agreement.id, result.clone())
+    //         .await;
+    //     let req_result = self
+    //         .provider
+    //         .agreement_finalized(&agreement.id, result)
+    //         .await;
     //
-    //         prov_result?;
-    //         req_result?;
-    //         Ok(())
-    //     }
+    //     prov_result?;
+    //     req_result?;
+    //     Ok(())
+    // }
 }
 
 impl FrameworkError {

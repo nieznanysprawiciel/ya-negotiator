@@ -19,7 +19,7 @@ pub enum ProposalAction {
     #[display(fmt = "AcceptProposal")]
     AcceptProposal { id: String },
     #[display(
-        fmt = "RejectProposal [{}] {}",
+        fmt = "RejectProposal [{}]{}",
         id,
         "reason.as_ref().map(|r| format!(\" (reason: {})\", r)).unwrap_or(\"\".into())"
     )]
@@ -34,7 +34,7 @@ pub enum AgreementAction {
         id: String,
     },
     #[display(
-        fmt = "RejectAgreement [{}] {}",
+        fmt = "RejectAgreement [{}]{}",
         id,
         "reason.as_ref().map(|r| format!(\" (reason: {})\", r)).unwrap_or(\"\".into())"
     )]

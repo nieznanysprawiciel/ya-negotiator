@@ -36,17 +36,20 @@ pub struct NegotiationRecord {
     pub results: HashMap<NodePair, NegotiationResult>,
     pub proposals: HashMap<String, Proposal>,
     pub agreements: HashMap<String, Agreement>,
+
+    max_steps: usize,
 }
 
 #[derive(Clone, Debug)]
 pub struct NegotiationRecordSync(pub Arc<Mutex<NegotiationRecord>>);
 
 impl NegotiationRecordSync {
-    pub fn new() -> NegotiationRecordSync {
+    pub fn new(max_steps: usize) -> NegotiationRecordSync {
         NegotiationRecordSync(Arc::new(Mutex::new(NegotiationRecord {
             results: Default::default(),
             proposals: Default::default(),
             agreements: Default::default(),
+            max_steps,
         })))
     }
 
@@ -83,6 +86,8 @@ impl NegotiationRecordSync {
 
     pub fn counter(&self, counter_proposal: Proposal, with_node: NodeId) {
         let mut record = self.0.lock().unwrap();
+        let max_steps = record.max_steps;
+
         let negotiation = record
             .results
             .entry(NodePair(counter_proposal.issuer_id, with_node))
@@ -99,6 +104,11 @@ impl NegotiationRecordSync {
         });
 
         negotiation.proposals.push(counter_proposal.clone());
+
+        if negotiation.proposals.len() > max_steps {
+            negotiation.stage.push(NegotiationStage::InfiniteLoop);
+        }
+
         record
             .proposals
             .insert(counter_proposal.proposal_id.clone(), counter_proposal);
@@ -173,6 +183,38 @@ impl NegotiationRecordSync {
             .unwrap()
             .proposals
             .insert(proposal.proposal_id.clone(), proposal);
+    }
+
+    pub fn is_finished(&self) -> bool {
+        let record = self.0.lock().unwrap();
+        record
+            .results
+            .iter()
+            .all(|(_, result)| result.is_finished())
+    }
+}
+
+impl NegotiationResult {
+    pub fn is_finished(&self) -> bool {
+        if self.agreement.is_some() {
+            return true;
+        }
+
+        match self.stage.last() {
+            Some(stage) => match stage {
+                NegotiationStage::Proposal {
+                    last_response: ProposalAction::RejectProposal { .. },
+                } => true,
+                NegotiationStage::Agreement {
+                    last_response: AgreementAction::RejectAgreement { .. },
+                } => true,
+                NegotiationStage::Error(_) => true,
+                NegotiationStage::InfiniteLoop => true,
+                NegotiationStage::Timeout => true,
+                _ => false,
+            },
+            None => false,
+        }
     }
 }
 

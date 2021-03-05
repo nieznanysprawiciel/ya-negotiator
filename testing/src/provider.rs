@@ -20,16 +20,23 @@ pub struct ProviderReactions {
 }
 
 impl ProviderReactions {
-    pub async fn accept_proposal(&self, node_id: NodeId, proposal_id: String) {
+    pub async fn accept_proposal(
+        &self,
+        node_id: NodeId,
+        proposal_id: String,
+    ) -> anyhow::Result<()> {
         let record = self.record.clone();
         let provider = self.providers.get(&node_id).cloned().unwrap();
 
         let req_proposal = record.get_proposal(&proposal_id).unwrap();
         let requestor = self.requestors.get(&req_proposal.issuer_id).unwrap();
 
-        let prov_proposal = record
+        let prev_prov_proposal = record
             .get_proposal(&req_proposal.prev_proposal_id.clone().unwrap())
             .unwrap();
+
+        let mut prov_proposal = prev_prov_proposal.clone();
+        prov_proposal.prev_proposal_id = Some(proposal_id);
 
         // Register event.
         record.accept(prov_proposal.clone(), req_proposal.issuer_id);
@@ -48,6 +55,7 @@ impl ProviderReactions {
         {
             record.error(req_proposal.issuer_id, prov_proposal.issuer_id, e.into());
         }
+        Ok(())
     }
 
     pub async fn reject_proposal(
@@ -55,13 +63,14 @@ impl ProviderReactions {
         node_id: NodeId,
         proposal_id: String,
         reason: Option<Reason>,
-    ) {
+    ) -> anyhow::Result<()> {
         let record = self.record.clone();
         let req_proposal = record.get_proposal(&proposal_id).unwrap();
 
         record.reject(node_id, req_proposal, reason);
 
         // We could notify Requestor, if Component API would allow it.
+        Ok(())
     }
 
     pub async fn counter_proposal(
@@ -69,7 +78,7 @@ impl ProviderReactions {
         node_id: NodeId,
         proposal_id: String,
         proposal: NewProposal,
-    ) {
+    ) -> anyhow::Result<()> {
         let record = self.record.clone();
         let provider = self.providers.get(&node_id).cloned().unwrap();
         let req_proposal = record.get_proposal(&proposal_id).unwrap();
@@ -83,9 +92,14 @@ impl ProviderReactions {
         if let Err(e) = requestor.react_to_proposal(&proposal, &req_proposal).await {
             record.error(req_proposal.issuer_id, proposal.issuer_id, e.into())
         }
+        Ok(())
     }
 
-    pub async fn approve_agreement(&self, node_id: NodeId, agreement_id: String) {
+    pub async fn approve_agreement(
+        &self,
+        node_id: NodeId,
+        agreement_id: String,
+    ) -> anyhow::Result<()> {
         let record = self.record.clone();
 
         let agreement = record.get_agreement(&agreement_id).unwrap();
@@ -105,6 +119,7 @@ impl ProviderReactions {
         if let Err(e) = p_result {
             record.error(provider.node_id, requestor.node_id, e.into())
         }
+        Ok(())
     }
 
     pub async fn reject_agreement(
@@ -112,7 +127,7 @@ impl ProviderReactions {
         node_id: NodeId,
         agreement_id: String,
         reason: Option<Reason>,
-    ) {
+    ) -> anyhow::Result<()> {
         let record = self.record.clone();
         let agreement = record.get_agreement(&agreement_id).unwrap();
         let requestor = self.requestors.get(agreement.requestor_id()).unwrap();
@@ -126,6 +141,7 @@ impl ProviderReactions {
         {
             record.error(requestor.node_id, node_id, e.into())
         }
+        Ok(())
     }
 }
 
@@ -158,7 +174,9 @@ pub async fn provider_proposals_processor(
             ProposalAction::RejectProposal { id, reason } => {
                 reactions.reject_proposal(node_id, id, reason).await
             }
-        };
+        }
+        .map_err(|e| record.node_error(node_id, e))
+        .ok();
 
         if record.is_finished() {
             break;
@@ -194,7 +212,9 @@ pub async fn provider_agreements_processor(
             AgreementAction::RejectAgreement { id, reason } => {
                 reactions.reject_agreement(node_id, id, reason).await
             }
-        };
+        }
+        .map_err(|e| record.node_error(node_id, e))
+        .ok();
 
         if record.is_finished() {
             break;

@@ -1,6 +1,7 @@
-use ya_agreement_utils::{AgreementView, OfferTemplate};
+use ya_agreement_utils::OfferTemplate;
 use ya_negotiators::factory::*;
 
+use ya_client_model::market::Proposal;
 use ya_client_model::NodeId;
 
 use crate::negotiation_record::{NegotiationRecord, NegotiationRecordSync};
@@ -8,13 +9,12 @@ use crate::node::{Node, NodeType};
 use crate::provider::{provider_agreements_processor, provider_proposals_processor};
 use crate::requestor::{requestor_agreements_processor, requestor_proposals_processor};
 
-use futures::future::join_all;
+use futures::future::select_all;
+use futures::{Future, FutureExt};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use ya_client_model::market::Proposal;
-use ya_negotiators::AgreementResult;
 
 #[derive(thiserror::Error)]
 #[error("{error}\nNegotiation traceback:\n\n{negotiation_traceback}")]
@@ -88,10 +88,12 @@ impl Framework {
             )
         }
 
-        let handles = self.spawn_processors(record.clone());
+        let processors_handle = self.spawn_processors(record.clone());
         self.init_for(offers, demands, record.clone()).await;
 
-        join_all(handles).await;
+        processors_handle
+            .await
+            .map_err(|e| FrameworkError::from(e, &record))?;
 
         let record = record.0.lock().unwrap();
         Ok(record.clone())
@@ -124,29 +126,36 @@ impl Framework {
         }
     }
 
-    fn spawn_processors(&self, record: NegotiationRecordSync) -> Vec<JoinHandle<()>> {
-        vec![
-            tokio::spawn(provider_proposals_processor(
-                self.providers.clone(),
-                self.requestors.clone(),
-                record.clone(),
-            )),
-            tokio::spawn(provider_agreements_processor(
-                self.providers.clone(),
-                self.requestors.clone(),
-                record.clone(),
-            )),
-            tokio::spawn(requestor_proposals_processor(
-                self.providers.clone(),
-                self.requestors.clone(),
-                record.clone(),
-            )),
-            tokio::spawn(requestor_agreements_processor(
-                self.providers.clone(),
-                self.requestors.clone(),
-                record.clone(),
-            )),
-        ]
+    fn spawn_processors(&self, record: NegotiationRecordSync) -> JoinHandle<()> {
+        tokio::spawn(
+            select_all(vec![
+                provider_proposals_processor(
+                    self.providers.clone(),
+                    self.requestors.clone(),
+                    record.clone(),
+                )
+                .boxed(),
+                provider_agreements_processor(
+                    self.providers.clone(),
+                    self.requestors.clone(),
+                    record.clone(),
+                )
+                .boxed(),
+                requestor_proposals_processor(
+                    self.providers.clone(),
+                    self.requestors.clone(),
+                    record.clone(),
+                )
+                .boxed(),
+                requestor_agreements_processor(
+                    self.providers.clone(),
+                    self.requestors.clone(),
+                    record.clone(),
+                )
+                .boxed(),
+            ])
+            .map(|_| ()),
+        )
     }
 
     // pub async fn run_finalize_agreement(
@@ -170,6 +179,8 @@ impl Framework {
     //     Ok(())
     // }
 }
+
+trait NegotiationResponseProcessor: Future<Output = ()> + Sized + 'static {}
 
 impl FrameworkError {
     pub fn from(error: impl Into<anyhow::Error>, result: &NegotiationRecordSync) -> FrameworkError {

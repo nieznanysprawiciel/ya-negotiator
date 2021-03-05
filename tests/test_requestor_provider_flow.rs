@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 
 use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
 use ya_builtin_negotiators::*;
-use ya_negotiator_component::AgreementResult;
 use ya_negotiators::factory::*;
 use ya_negotiators_testing::Framework;
 

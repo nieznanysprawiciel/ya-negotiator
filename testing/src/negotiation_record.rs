@@ -37,6 +37,8 @@ pub struct NegotiationRecord {
     pub proposals: HashMap<String, Proposal>,
     pub agreements: HashMap<String, Agreement>,
 
+    pub errors: HashMap<NodeId, Vec<String>>,
+
     max_steps: usize,
 }
 
@@ -49,10 +51,12 @@ impl NegotiationRecordSync {
             results: Default::default(),
             proposals: Default::default(),
             agreements: Default::default(),
+            errors: Default::default(),
             max_steps,
         })))
     }
 
+    /// Error between Provider and Requestor.
     pub fn error(&self, owner_node: NodeId, with_node: NodeId, e: anyhow::Error) {
         let mut record = self.0.lock().unwrap();
         let negotiation = record
@@ -63,6 +67,16 @@ impl NegotiationRecordSync {
         negotiation
             .stage
             .push(NegotiationStage::Error(e.to_string()));
+    }
+
+    /// Node error, that cannot be assinged to any negotiations pair.
+    pub fn node_error(&self, owner_node: NodeId, e: anyhow::Error) {
+        let mut record = self.0.lock().unwrap();
+        record
+            .errors
+            .entry(owner_node)
+            .or_insert(vec![])
+            .push(e.to_string())
     }
 
     pub fn accept(&self, counter_proposal: Proposal, with_node: NodeId) {
@@ -167,6 +181,13 @@ impl NegotiationRecordSync {
                 reason,
             },
         });
+    }
+
+    pub fn propose_agreement(&self, agreement: Agreement) {
+        let mut record = self.0.lock().unwrap();
+        record
+            .agreements
+            .insert(agreement.agreement_id.clone(), agreement);
     }
 
     pub fn get_proposal(&self, id: &String) -> Option<Proposal> {

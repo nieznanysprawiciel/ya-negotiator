@@ -25,8 +25,8 @@ pub struct Node {
     pub node_id: NodeId,
     pub node_type: NodeType,
 
-    pub agreement_sender: broadcast::Sender<(NodeId, AgreementAction)>,
-    pub proposal_sender: broadcast::Sender<(NodeId, ProposalAction)>,
+    pub agreement_sender: broadcast::Sender<AgreementAction>,
+    pub proposal_sender: broadcast::Sender<ProposalAction>,
 }
 
 impl Node {
@@ -50,28 +50,26 @@ impl Node {
             agreement_channel: mut agreement,
         } = callbacks;
 
-        let id = node_id.clone();
         tokio::task::spawn(async move {
             while let Some(action) = proposal.recv().await {
-                proposal_sender.send((id, action)).ok();
+                proposal_sender.send(action).ok();
             }
         });
 
-        let id = node_id.clone();
         tokio::task::spawn(async move {
             while let Some(action) = agreement.recv().await {
-                agreement_sender.send((id, action)).ok();
+                agreement_sender.send(action).ok();
             }
         });
 
         Ok(Arc::new(node))
     }
 
-    pub fn agreement_channel(&self) -> broadcast::Receiver<(NodeId, AgreementAction)> {
+    pub fn agreement_channel(&self) -> broadcast::Receiver<AgreementAction> {
         self.agreement_sender.subscribe()
     }
 
-    pub fn proposal_channel(&self) -> broadcast::Receiver<(NodeId, ProposalAction)> {
+    pub fn proposal_channel(&self) -> broadcast::Receiver<ProposalAction> {
         self.proposal_sender.subscribe()
     }
 

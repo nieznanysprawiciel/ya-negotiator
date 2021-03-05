@@ -8,12 +8,10 @@ use ya_client_model::NodeId;
 use crate::negotiation_record::NegotiationRecordSync;
 use crate::node::Node;
 
-use futures::stream::select_all;
-use futures::StreamExt;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tokio_stream::wrappers::BroadcastStream;
+use tokio::stream::{StreamExt, StreamMap};
 
 pub struct ProviderReactions {
     pub providers: HashMap<NodeId, Arc<Node>>,
@@ -136,12 +134,14 @@ pub async fn provider_proposals_processor(
     requestors: HashMap<NodeId, Arc<Node>>,
     record: NegotiationRecordSync,
 ) {
-    let mut p_receivers = select_all(
-        providers
-            .iter()
-            .map(|(_, node)| BroadcastStream::new(node.proposal_channel()))
-            .collect::<Vec<BroadcastStream<_>>>(),
-    );
+    let mut p_receivers = StreamMap::new();
+
+    providers.iter().for_each(|(_, node)| {
+        p_receivers.insert(
+            node.node_id,
+            Box::pin(node.proposal_channel().into_stream()),
+        );
+    });
 
     let reactions = ProviderReactions {
         record: record.clone(),
@@ -149,7 +149,7 @@ pub async fn provider_proposals_processor(
         providers,
     };
 
-    while let Some(Ok((node_id, action))) = p_receivers.next().await {
+    while let Some((node_id, Ok(action))) = p_receivers.next().await {
         match action {
             ProposalAction::AcceptProposal { id } => reactions.accept_proposal(node_id, id).await,
             ProposalAction::CounterProposal { id, proposal } => {
@@ -171,12 +171,14 @@ pub async fn provider_agreements_processor(
     requestors: HashMap<NodeId, Arc<Node>>,
     record: NegotiationRecordSync,
 ) {
-    let mut p_receivers = select_all(
-        providers
-            .iter()
-            .map(|(_, node)| BroadcastStream::new(node.agreement_channel()))
-            .collect::<Vec<BroadcastStream<_>>>(),
-    );
+    let mut p_receivers = StreamMap::new();
+
+    providers.iter().for_each(|(_, node)| {
+        p_receivers.insert(
+            node.node_id,
+            Box::pin(node.agreement_channel().into_stream()),
+        );
+    });
 
     let reactions = ProviderReactions {
         record: record.clone(),
@@ -184,7 +186,7 @@ pub async fn provider_agreements_processor(
         providers,
     };
 
-    while let Some(Ok((node_id, action))) = p_receivers.next().await {
+    while let Some((node_id, Ok(action))) = p_receivers.next().await {
         match action {
             AgreementAction::ApproveAgreement { id } => {
                 reactions.approve_agreement(node_id, id).await

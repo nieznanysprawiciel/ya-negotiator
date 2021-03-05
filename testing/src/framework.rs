@@ -90,7 +90,7 @@ impl Framework {
             )
         }
 
-        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(30));
+        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(10));
         self.init_for(offers, demands, record.clone()).await;
 
         processors_handle

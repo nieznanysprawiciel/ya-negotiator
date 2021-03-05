@@ -11,6 +11,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt;
+use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -30,7 +31,7 @@ pub struct NegotiationResult {
     pub agreement: Option<AgreementView>,
 }
 
-#[derive(Hash, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NodePair(NodeId, NodeId);
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -298,6 +299,14 @@ impl NodePair {
     }
 }
 
+impl Hash for NodePair {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        let pair = self.clone().ordered();
+        pair.0.hash(state);
+        pair.1.hash(state);
+    }
+}
+
 fn compare_ids(id1: NodeId, id2: NodeId) -> Ordering {
     if id1.into_array() < id2.into_array() {
         Ordering::Less
@@ -327,5 +336,29 @@ impl NegotiationResult {
             proposals: vec![],
             agreement: None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_node_pair_order() {
+        let id1 = NodeId::from_str("0x33796f397a554a6c33675976683031774f637a37").unwrap();
+        let id2 = NodeId::from_str("0x4c684d736d3157416a6e494145776833584b4339").unwrap();
+
+        let pair1 = NodePair(id1.clone(), id2.clone());
+        let pair2 = NodePair(id2.clone(), id1.clone());
+
+        assert_eq!(pair1, pair2);
+        assert_eq!(pair1.partial_cmp(&pair2).unwrap(), Ordering::Equal);
+
+        let mut map = HashMap::<NodePair, Vec<String>>::new();
+        map.entry(pair1).or_insert(vec![]).push("dupa1".to_string());
+        map.entry(pair2).or_insert(vec![]).push("dupa2".to_string());
+
+        assert_eq!(map.len(), 1);
     }
 }

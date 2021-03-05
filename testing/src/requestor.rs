@@ -8,6 +8,7 @@ use ya_client_model::NodeId;
 use crate::negotiation_record::NegotiationRecordSync;
 use crate::node::Node;
 
+use crate::error::NegotiatorError;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -27,19 +28,35 @@ impl RequestorReactions {
         proposal_id: String,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let requestor = self.requestors.get(&node_id).unwrap();
+        let requestor = self.get_requestor(&node_id)?;
 
-        let prov_proposal = record.get_proposal(&proposal_id).unwrap();
+        let prov_proposal = record.get_proposal(&proposal_id)?;
+        let provider = self.get_provider(&prov_proposal.issuer_id)?;
 
-        let prev_req_proposal = record
-            .get_proposal(&prov_proposal.prev_proposal_id.clone().unwrap())
-            .unwrap();
+        let prev_req_proposal = record.get_proposal(
+            &prov_proposal
+                .prev_proposal_id
+                .clone()
+                .ok_or(NegotiatorError::NoPrevProposal(proposal_id.clone()))?,
+        )?;
 
         let mut req_proposal = prev_req_proposal.clone();
         req_proposal.prev_proposal_id = Some(proposal_id.clone());
 
         // Register event.
         record.accept(req_proposal.clone(), prov_proposal.issuer_id);
+
+        // It means, we are countering Initial Proposal, so we can't create Agreement
+        // without at least one step of negotiations.
+        if let None = prev_req_proposal.prev_proposal_id {
+            if let Err(e) = provider
+                .react_to_proposal(&req_proposal, &prov_proposal)
+                .await
+            {
+                record.error(prov_proposal.issuer_id, req_proposal.issuer_id, e.into());
+            }
+            return Ok(());
+        }
 
         let agreement = requestor.create_agreement(&req_proposal, &prov_proposal);
         let view = AgreementView::try_from(&agreement).unwrap();
@@ -60,7 +77,7 @@ impl RequestorReactions {
         reason: Option<Reason>,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let prov_proposal = record.get_proposal(&proposal_id).unwrap();
+        let prov_proposal = record.get_proposal(&proposal_id)?;
 
         record.reject(node_id, prov_proposal, reason);
 
@@ -75,10 +92,10 @@ impl RequestorReactions {
         proposal: NewProposal,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let requestor = self.requestors.get(&node_id).unwrap();
+        let requestor = self.get_requestor(&node_id)?;
 
-        let prov_proposal = record.get_proposal(&proposal_id).unwrap();
-        let provider = self.requestors.get(&prov_proposal.issuer_id).unwrap();
+        let prov_proposal = record.get_proposal(&proposal_id)?;
+        let provider = self.get_provider(&prov_proposal.issuer_id)?;
 
         let proposal = requestor.into_proposal(proposal, State::Draft);
 
@@ -99,8 +116,8 @@ impl RequestorReactions {
         agreement_id: String,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let agreement = record.get_agreement(&agreement_id).unwrap();
-        let provider = self.providers.get(agreement.provider_id()).unwrap();
+        let agreement = record.get_agreement(&agreement_id)?;
+        let provider = self.get_provider(agreement.provider_id())?;
         let provider_id = agreement.provider_id().clone();
 
         let view = AgreementView::try_from(&agreement).unwrap();
@@ -124,6 +141,20 @@ impl RequestorReactions {
 
         record.reject_agreement(agreement, reason);
         Ok(())
+    }
+
+    pub fn get_provider(&self, id: &NodeId) -> Result<Arc<Node>, NegotiatorError> {
+        self.providers
+            .get(id)
+            .cloned()
+            .ok_or(NegotiatorError::ProviderNotFound(id.clone()))
+    }
+
+    pub fn get_requestor(&self, id: &NodeId) -> Result<Arc<Node>, NegotiatorError> {
+        self.requestors
+            .get(id)
+            .cloned()
+            .ok_or(NegotiatorError::RequestorNotFound(id.clone()))
     }
 }
 

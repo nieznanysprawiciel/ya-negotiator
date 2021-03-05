@@ -1,3 +1,4 @@
+pub mod error;
 mod framework;
 mod negotiation_record;
 mod node;

@@ -4,6 +4,8 @@ use ya_negotiators::{AgreementAction, ProposalAction};
 use ya_client_model::market::{Agreement, NewProposal, Proposal, Reason};
 use ya_client_model::NodeId;
 
+use crate::error::NegotiatorError;
+
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -81,6 +83,8 @@ impl NegotiationRecordSync {
 
     pub fn accept(&self, counter_proposal: Proposal, with_node: NodeId) {
         let mut record = self.0.lock().unwrap();
+        let max_steps = record.max_steps;
+
         let negotiation = record
             .results
             .entry(NodePair(counter_proposal.issuer_id, with_node))
@@ -93,6 +97,11 @@ impl NegotiationRecordSync {
         });
 
         negotiation.proposals.push(counter_proposal.clone());
+
+        if negotiation.proposals.len() > max_steps {
+            negotiation.stage.push(NegotiationStage::InfiniteLoop);
+        }
+
         record
             .proposals
             .insert(counter_proposal.proposal_id.clone(), counter_proposal);
@@ -190,12 +199,12 @@ impl NegotiationRecordSync {
             .insert(agreement.agreement_id.clone(), agreement);
     }
 
-    pub fn get_proposal(&self, id: &String) -> Option<Proposal> {
-        self.0.lock().unwrap().proposals.get(id).cloned()
+    pub fn get_proposal(&self, id: &String) -> Result<Proposal, NegotiatorError> {
+        self.0.lock().unwrap().get_proposal(id)
     }
 
-    pub fn get_agreement(&self, id: &String) -> Option<Agreement> {
-        self.0.lock().unwrap().agreements.get(id).cloned()
+    pub fn get_agreement(&self, id: &String) -> Result<Agreement, NegotiatorError> {
+        self.0.lock().unwrap().get_agreement(id)
     }
 
     pub fn add_proposal(&self, proposal: Proposal) {
@@ -212,6 +221,22 @@ impl NegotiationRecordSync {
             .results
             .iter()
             .all(|(_, result)| result.is_finished())
+    }
+}
+
+impl NegotiationRecord {
+    pub fn get_proposal(&self, id: &String) -> Result<Proposal, NegotiatorError> {
+        self.proposals
+            .get(id)
+            .cloned()
+            .ok_or(NegotiatorError::ProposalNotFound(id.to_string()))
+    }
+
+    pub fn get_agreement(&self, id: &String) -> Result<Agreement, NegotiatorError> {
+        self.agreements
+            .get(id)
+            .cloned()
+            .ok_or(NegotiatorError::AgreementNotFound(id.to_string()))
     }
 }
 

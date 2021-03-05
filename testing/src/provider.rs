@@ -8,6 +8,7 @@ use ya_client_model::NodeId;
 use crate::negotiation_record::NegotiationRecordSync;
 use crate::node::Node;
 
+use crate::error::NegotiatorError;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -26,14 +27,13 @@ impl ProviderReactions {
         proposal_id: String,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let provider = self.providers.get(&node_id).cloned().unwrap();
+        let provider = self.get_provider(&node_id)?;
 
-        let req_proposal = record.get_proposal(&proposal_id).unwrap();
-        let requestor = self.requestors.get(&req_proposal.issuer_id).unwrap();
+        let req_proposal = record.get_proposal(&proposal_id)?;
+        let requestor = self.get_requestor(&req_proposal.issuer_id)?;
 
-        let prev_prov_proposal = record
-            .get_proposal(&req_proposal.prev_proposal_id.clone().unwrap())
-            .unwrap();
+        let prev_prov_proposal =
+            record.get_proposal(&req_proposal.prev_proposal_id.clone().unwrap())?;
 
         let mut prov_proposal = prev_prov_proposal.clone();
         prov_proposal.prev_proposal_id = Some(proposal_id);
@@ -65,7 +65,7 @@ impl ProviderReactions {
         reason: Option<Reason>,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let req_proposal = record.get_proposal(&proposal_id).unwrap();
+        let req_proposal = record.get_proposal(&proposal_id)?;
 
         record.reject(node_id, req_proposal, reason);
 
@@ -80,9 +80,9 @@ impl ProviderReactions {
         proposal: NewProposal,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let provider = self.providers.get(&node_id).cloned().unwrap();
-        let req_proposal = record.get_proposal(&proposal_id).unwrap();
-        let requestor = self.requestors.get(&req_proposal.issuer_id).unwrap();
+        let provider = self.get_provider(&node_id)?;
+        let req_proposal = record.get_proposal(&proposal_id)?;
+        let requestor = self.get_requestor(&req_proposal.issuer_id)?;
 
         let proposal = provider.into_proposal(proposal, State::Draft);
 
@@ -102,9 +102,9 @@ impl ProviderReactions {
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
 
-        let agreement = record.get_agreement(&agreement_id).unwrap();
-        let provider = self.providers.get(&node_id).cloned().unwrap();
-        let requestor = self.requestors.get(agreement.requestor_id()).unwrap();
+        let agreement = record.get_agreement(&agreement_id)?;
+        let provider = self.get_provider(&node_id)?;
+        let requestor = self.get_requestor(agreement.requestor_id())?;
         let view = AgreementView::try_from(&agreement).unwrap();
 
         record.approve(agreement);
@@ -129,8 +129,8 @@ impl ProviderReactions {
         reason: Option<Reason>,
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
-        let agreement = record.get_agreement(&agreement_id).unwrap();
-        let requestor = self.requestors.get(agreement.requestor_id()).unwrap();
+        let agreement = record.get_agreement(&agreement_id)?;
+        let requestor = self.get_requestor(agreement.requestor_id())?;
         let agreement_id = agreement.agreement_id.clone();
 
         record.reject_agreement(agreement, reason);
@@ -142,6 +142,20 @@ impl ProviderReactions {
             record.error(requestor.node_id, node_id, e.into())
         }
         Ok(())
+    }
+
+    pub fn get_provider(&self, id: &NodeId) -> Result<Arc<Node>, NegotiatorError> {
+        self.providers
+            .get(id)
+            .cloned()
+            .ok_or(NegotiatorError::ProviderNotFound(id.clone()))
+    }
+
+    pub fn get_requestor(&self, id: &NodeId) -> Result<Arc<Node>, NegotiatorError> {
+        self.requestors
+            .get(id)
+            .cloned()
+            .ok_or(NegotiatorError::RequestorNotFound(id.clone()))
     }
 }
 

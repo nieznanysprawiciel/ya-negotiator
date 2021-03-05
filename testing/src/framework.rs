@@ -14,7 +14,9 @@ use futures::{Future, FutureExt};
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::task::JoinHandle;
+use tokio::time::timeout;
 
 #[derive(thiserror::Error)]
 #[error("{error}\nNegotiation traceback:\n\n{negotiation_traceback}")]
@@ -88,7 +90,7 @@ impl Framework {
             )
         }
 
-        let processors_handle = self.spawn_processors(record.clone());
+        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(30));
         self.init_for(offers, demands, record.clone()).await;
 
         processors_handle
@@ -126,31 +128,43 @@ impl Framework {
         }
     }
 
-    fn spawn_processors(&self, record: NegotiationRecordSync) -> JoinHandle<()> {
+    fn spawn_processors(&self, record: NegotiationRecordSync, run_for: Duration) -> JoinHandle<()> {
         tokio::spawn(
             select_all(vec![
-                provider_proposals_processor(
-                    self.providers.clone(),
-                    self.requestors.clone(),
-                    record.clone(),
+                timeout(
+                    run_for,
+                    provider_proposals_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
                 )
                 .boxed(),
-                provider_agreements_processor(
-                    self.providers.clone(),
-                    self.requestors.clone(),
-                    record.clone(),
+                timeout(
+                    run_for,
+                    provider_agreements_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
                 )
                 .boxed(),
-                requestor_proposals_processor(
-                    self.providers.clone(),
-                    self.requestors.clone(),
-                    record.clone(),
+                timeout(
+                    run_for,
+                    requestor_proposals_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
                 )
                 .boxed(),
-                requestor_agreements_processor(
-                    self.providers.clone(),
-                    self.requestors.clone(),
-                    record.clone(),
+                timeout(
+                    run_for,
+                    requestor_agreements_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
                 )
                 .boxed(),
             ])

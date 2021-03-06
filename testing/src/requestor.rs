@@ -60,12 +60,12 @@ impl RequestorReactions {
         }
 
         let agreement = requestor.create_agreement(&req_proposal, &prov_proposal);
-        let view = AgreementView::try_from(&agreement).unwrap();
+        let agreement = AgreementView::try_from(&agreement).unwrap();
 
-        record.propose_agreement(agreement);
+        record.propose_agreement(agreement.clone());
 
         // Requestor will asynchronously send message, that he wants too send this Agreement to Provider.
-        if let Err(e) = requestor.react_to_agreement(&view).await {
+        if let Err(e) = requestor.react_to_agreement(&agreement).await {
             record.error(req_proposal.issuer_id, prov_proposal.issuer_id, e.into());
         }
         Ok(())
@@ -118,14 +118,12 @@ impl RequestorReactions {
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
         let agreement = record.get_agreement(&agreement_id)?;
-        let provider = self.get_provider(agreement.provider_id())?;
-        let provider_id = agreement.provider_id().clone();
+        let provider_id = agreement.provider_id()?.clone();
+        let provider = self.get_provider(&provider_id)?;
 
-        let view = AgreementView::try_from(&agreement).unwrap();
+        record.approve(agreement.clone());
 
-        record.approve(agreement);
-
-        if let Err(e) = provider.react_to_agreement(&view).await {
+        if let Err(e) = provider.react_to_agreement(&agreement).await {
             record.error(provider_id, node_id, e.into());
         }
         Ok(())

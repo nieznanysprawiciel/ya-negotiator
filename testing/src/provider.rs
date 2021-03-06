@@ -1,4 +1,3 @@
-use ya_agreement_utils::AgreementView;
 use ya_negotiators::{AgreementAction, AgreementResult, ProposalAction};
 
 use ya_client_model::market::proposal::State;
@@ -11,7 +10,6 @@ use crate::node::Node;
 use crate::error::NegotiatorError;
 use backtrace::Backtrace;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::sync::Arc;
 use tokio::stream::{StreamExt, StreamMap};
 
@@ -96,13 +94,12 @@ impl ProviderReactions {
 
         let agreement = record.get_agreement(&agreement_id)?;
         let provider = self.get_provider(&node_id)?;
-        let requestor = self.get_requestor(agreement.requestor_id())?;
-        let view = AgreementView::try_from(&agreement).unwrap();
+        let requestor = self.get_requestor(&agreement.requestor_id()?)?;
 
-        record.approve(agreement);
+        record.approve(agreement.clone());
 
-        let r_result = requestor.agreement_signed(&view).await;
-        let p_result = provider.agreement_signed(&view).await;
+        let r_result = requestor.agreement_signed(&agreement).await;
+        let p_result = provider.agreement_signed(&agreement).await;
 
         if let Err(e) = r_result {
             record.error(requestor.node_id, provider.node_id, e.into())
@@ -122,8 +119,8 @@ impl ProviderReactions {
     ) -> anyhow::Result<()> {
         let record = self.record.clone();
         let agreement = record.get_agreement(&agreement_id)?;
-        let requestor = self.get_requestor(agreement.requestor_id())?;
-        let agreement_id = agreement.agreement_id.clone();
+        let requestor = self.get_requestor(&agreement.requestor_id()?)?;
+        let agreement_id = agreement.id.clone();
 
         record.reject_agreement(agreement, reason);
 

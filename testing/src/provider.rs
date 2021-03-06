@@ -36,22 +36,13 @@ impl ProviderReactions {
         let prev_prov_proposal =
             record.get_proposal(&req_proposal.prev_proposal_id.clone().unwrap())?;
 
-        let mut prov_proposal = prev_prov_proposal.clone();
-        prov_proposal.prev_proposal_id = Some(proposal_id);
+        let prov_proposal = provider.recounter_proposal(&proposal_id, &prev_prov_proposal);
 
         // Register event.
         record.accept(prov_proposal.clone(), req_proposal.issuer_id);
 
-        let new_proposal = provider.into_proposal(
-            NewProposal {
-                properties: prov_proposal.properties,
-                constraints: prov_proposal.constraints,
-            },
-            State::Draft,
-        );
-
         if let Err(e) = requestor
-            .react_to_proposal(&new_proposal, &req_proposal)
+            .react_to_proposal(&prov_proposal, &req_proposal)
             .await
         {
             record.error(req_proposal.issuer_id, prov_proposal.issuer_id, e.into());

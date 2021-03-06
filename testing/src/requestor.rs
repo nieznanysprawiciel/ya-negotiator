@@ -42,8 +42,7 @@ impl RequestorReactions {
                 },
             )?)?;
 
-        let mut req_proposal = prev_req_proposal.clone();
-        req_proposal.prev_proposal_id = Some(proposal_id.clone());
+        let req_proposal = requestor.recounter_proposal(&proposal_id, &prev_req_proposal);
 
         // Register event.
         record.accept(req_proposal.clone(), prov_proposal.issuer_id);

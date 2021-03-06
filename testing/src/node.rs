@@ -123,6 +123,18 @@ impl Node {
         }
     }
 
+    /// In case of accept Proposal, we use the same Proposal as we sent
+    /// previously, but with new id.
+    pub fn recounter_proposal(&self, id: &str, out_prev_proposal: &Proposal) -> Proposal {
+        let mut new_proposal = out_prev_proposal.clone();
+        new_proposal.prev_proposal_id = Some(id.to_string());
+        new_proposal.proposal_id = generate_id();
+        new_proposal.issuer_id = self.node_id; // To be sure
+        new_proposal.state = State::Draft;
+        new_proposal.timestamp = Utc::now();
+        new_proposal
+    }
+
     pub fn create_agreement(
         &self,
         demand_proposal: &Proposal,

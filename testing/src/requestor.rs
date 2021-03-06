@@ -9,6 +9,7 @@ use crate::negotiation_record::NegotiationRecordSync;
 use crate::node::Node;
 
 use crate::error::NegotiatorError;
+use backtrace::Backtrace;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -33,12 +34,13 @@ impl RequestorReactions {
         let prov_proposal = record.get_proposal(&proposal_id)?;
         let provider = self.get_provider(&prov_proposal.issuer_id)?;
 
-        let prev_req_proposal = record.get_proposal(
-            &prov_proposal
-                .prev_proposal_id
-                .clone()
-                .ok_or(NegotiatorError::NoPrevProposal(proposal_id.clone()))?,
-        )?;
+        let prev_req_proposal =
+            record.get_proposal(&prov_proposal.prev_proposal_id.clone().ok_or(
+                NegotiatorError::NoPrevProposal {
+                    id: proposal_id.to_string(),
+                    trace: format!("{:?}", Backtrace::new()),
+                },
+            )?)?;
 
         let mut req_proposal = prev_req_proposal.clone();
         req_proposal.prev_proposal_id = Some(proposal_id.clone());
@@ -147,14 +149,20 @@ impl RequestorReactions {
         self.providers
             .get(id)
             .cloned()
-            .ok_or(NegotiatorError::ProviderNotFound(id.clone()))
+            .ok_or(NegotiatorError::ProviderNotFound {
+                node_id: id.clone(),
+                trace: format!("{:?}", Backtrace::new()),
+            })
     }
 
     pub fn get_requestor(&self, id: &NodeId) -> Result<Arc<Node>, NegotiatorError> {
         self.requestors
             .get(id)
             .cloned()
-            .ok_or(NegotiatorError::RequestorNotFound(id.clone()))
+            .ok_or(NegotiatorError::ProviderNotFound {
+                node_id: id.clone(),
+                trace: format!("{:?}", Backtrace::new()),
+            })
     }
 }
 

@@ -1,15 +1,17 @@
 use ya_client_model::NodeId;
 
+/// Note: trace can't be of type Backtrace, because thiserror
+/// treats it as fields with special meaning, at it doesn't compile.
 #[derive(thiserror::Error, Debug)]
 pub enum NegotiatorError {
-    #[error("Requestor {0} not found")]
-    RequestorNotFound(NodeId),
-    #[error("Provider {0} not found")]
-    ProviderNotFound(NodeId),
-    #[error("Proposal {0} not found")]
-    ProposalNotFound(String),
-    #[error("Agreement {0} not found")]
-    AgreementNotFound(String),
-    #[error("Proposal {0} has no previous Proposal")]
-    NoPrevProposal(String),
+    #[error("Requestor {node_id} not found.")]
+    RequestorNotFound { node_id: NodeId, trace: String },
+    #[error("Provider {node_id} not found.")]
+    ProviderNotFound { node_id: NodeId, trace: String },
+    #[error("Proposal {id} not found.")]
+    ProposalNotFound { id: String, trace: String },
+    #[error("Agreement {id} not found.")]
+    AgreementNotFound { id: String, trace: String },
+    #[error("Proposal {id} has no previous Proposal.")]
+    NoPrevProposal { id: String, trace: String },
 }

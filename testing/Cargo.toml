@@ -17,6 +17,7 @@ ya-client-model = "0.2"
 
 actix = { version = "0.10" }
 anyhow = "1.0.31"
+backtrace = "0.3"
 chrono = "0.4.10"
 futures = "0.3.12"
 serde = "1.0"

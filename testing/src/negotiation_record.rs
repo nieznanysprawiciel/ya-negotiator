@@ -6,6 +6,7 @@ use ya_client_model::NodeId;
 
 use crate::error::NegotiatorError;
 
+use backtrace::Backtrace;
 use serde::{Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::HashMap;
@@ -230,14 +231,20 @@ impl NegotiationRecord {
         self.proposals
             .get(id)
             .cloned()
-            .ok_or(NegotiatorError::ProposalNotFound(id.to_string()))
+            .ok_or(NegotiatorError::ProposalNotFound {
+                id: id.to_string(),
+                trace: format!("{:?}", Backtrace::new()),
+            })
     }
 
     pub fn get_agreement(&self, id: &String) -> Result<Agreement, NegotiatorError> {
         self.agreements
             .get(id)
             .cloned()
-            .ok_or(NegotiatorError::AgreementNotFound(id.to_string()))
+            .ok_or(NegotiatorError::AgreementNotFound {
+                id: id.to_string(),
+                trace: format!("{:?}", Backtrace::new()),
+            })
     }
 }
 

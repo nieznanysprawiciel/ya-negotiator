@@ -9,6 +9,7 @@ use crate::negotiation_record::NegotiationRecordSync;
 use crate::node::Node;
 
 use crate::error::NegotiatorError;
+use backtrace::Backtrace;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
@@ -148,14 +149,20 @@ impl ProviderReactions {
         self.providers
             .get(id)
             .cloned()
-            .ok_or(NegotiatorError::ProviderNotFound(id.clone()))
+            .ok_or(NegotiatorError::ProviderNotFound {
+                node_id: id.clone(),
+                trace: format!("{:?}", Backtrace::new()),
+            })
     }
 
     pub fn get_requestor(&self, id: &NodeId) -> Result<Arc<Node>, NegotiatorError> {
         self.requestors
             .get(id)
             .cloned()
-            .ok_or(NegotiatorError::RequestorNotFound(id.clone()))
+            .ok_or(NegotiatorError::ProviderNotFound {
+                node_id: id.clone(),
+                trace: format!("{:?}", Backtrace::new()),
+            })
     }
 }
 

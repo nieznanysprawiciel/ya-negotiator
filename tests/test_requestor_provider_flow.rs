@@ -67,7 +67,7 @@ async fn test_requestor_provider_flow() {
         .await
         .unwrap();
 
-    //println!("{}", result);
+    println!("{}", result);
     // framework
     //     .run_finalize_agreement(
     //         &result.agreement.unwrap(),
@@ -75,5 +75,5 @@ async fn test_requestor_provider_flow() {
     //     )
     //     .await
     //     .unwrap();
-    assert!(false);
+    //assert!(false);
 }

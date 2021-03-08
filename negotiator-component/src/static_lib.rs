@@ -5,11 +5,8 @@ use std::sync::{Arc, Mutex};
 
 use crate::component::NegotiatorComponent;
 
-pub type ConstructorFunction = Box<
-    dyn Fn(&str, serde_yaml::Value) -> anyhow::Result<Box<dyn NegotiatorComponent + Send + Sync>>
-        + Send
-        + Sync,
->;
+pub type ConstructorFunction =
+    Box<dyn Fn(serde_yaml::Value) -> anyhow::Result<Box<dyn NegotiatorComponent>> + Send + Sync>;
 
 lazy_static! {
     /// Contains functions that can create negotiators by name.
@@ -17,22 +14,24 @@ lazy_static! {
 }
 
 pub fn register_negotiator(library: &str, name: &str, constructor: ConstructorFunction) {
+    let negotiator = format!("{}::{}", library, name);
+    println!("Registering: {}", negotiator);
     (*CONSTRUCTORS)
         .lock()
         .unwrap()
-        .insert(format!("{}::{}", library, name), constructor);
+        .insert(negotiator, constructor);
 }
 
 pub fn create_static_negotiator(
     name_path: &str,
     config: serde_yaml::Value,
-) -> anyhow::Result<Box<dyn NegotiatorComponent + Send + Sync>> {
+) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
     let map = (*CONSTRUCTORS)
         .lock()
         .map_err(|e| anyhow!("Failed to acquire static Negotiator creation lock: {}", e))?;
 
     match map.get(name_path) {
-        Some(constructor) => constructor(name_path, config),
+        Some(constructor) => constructor(config),
         None => Err(anyhow!("Negotiator '{}' not found.", name_path)),
     }
 }

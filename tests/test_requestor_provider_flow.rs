@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
 use ya_builtin_negotiators::*;
 use ya_negotiators::factory::*;
+use ya_negotiators::AgreementResult;
 use ya_negotiators_testing::Framework;
 
 fn example_config() -> NegotiatorsConfig {
@@ -59,7 +60,7 @@ fn example_demand(deadline: DateTime<Utc>) -> OfferTemplate {
 #[actix_rt::test]
 async fn test_requestor_provider_flow() {
     let framework = Framework::new(example_config(), req_example_config()).unwrap();
-    let result = framework
+    let record = framework
         .run_for_templates(
             example_demand(Utc::now() + chrono::Duration::seconds(150)),
             example_offer(),
@@ -67,13 +68,25 @@ async fn test_requestor_provider_flow() {
         .await
         .unwrap();
 
-    println!("{}", result);
-    // framework
-    //     .run_finalize_agreement(
-    //         &result.agreement.unwrap(),
-    //         AgreementResult::ClosedByRequestor,
-    //     )
-    //     .await
-    //     .unwrap();
+    record
+        .results
+        .iter()
+        .for_each(|(_nodes, result)| assert!(result.agreement.is_some()));
+
+    let results = framework
+        .run_finalize_agreements(
+            record
+                .agreements
+                .iter()
+                .map(|(_, agreement)| (agreement, AgreementResult::ClosedByRequestor))
+                .collect(),
+        )
+        .await;
+
+    if results.iter().any(|result| result.is_err()) {
+        panic!(results);
+    }
+
+    println!("{}", record);
     //assert!(false);
 }

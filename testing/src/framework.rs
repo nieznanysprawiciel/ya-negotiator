@@ -1,5 +1,6 @@
-use ya_agreement_utils::OfferTemplate;
+use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_negotiators::factory::*;
+use ya_negotiators::AgreementResult;
 
 use ya_client_model::market::Proposal;
 use ya_client_model::NodeId;
@@ -9,6 +10,7 @@ use crate::node::{Node, NodeType};
 use crate::provider::{provider_agreements_processor, provider_proposals_processor};
 use crate::requestor::{requestor_agreements_processor, requestor_proposals_processor};
 
+use anyhow::anyhow;
 use futures::future::select_all;
 use futures::{Future, FutureExt};
 use std::collections::HashMap;
@@ -172,26 +174,42 @@ impl Framework {
         )
     }
 
-    // pub async fn run_finalize_agreement(
-    //     &self,
-    //     agreement: &AgreementView,
-    //     result: AgreementResult,
-    // ) -> anyhow::Result<()> {
-    //     // First call both functions and resolve errors later. We don't want
-    //     // to omit any of these calls.
-    //     let prov_result = self
-    //         .requestor
-    //         .agreement_finalized(&agreement.id, result.clone())
-    //         .await;
-    //     let req_result = self
-    //         .provider
-    //         .agreement_finalized(&agreement.id, result)
-    //         .await;
-    //
-    //     prov_result?;
-    //     req_result?;
-    //     Ok(())
-    // }
+    pub async fn run_finalize_agreements(
+        &self,
+        to_finalize: Vec<(&AgreementView, AgreementResult)>,
+    ) -> Vec<anyhow::Result<()>> {
+        let mut results = vec![];
+        for agreement in to_finalize {
+            results.push(self.finalize_agreement(agreement.0, agreement.1).await);
+        }
+        results
+    }
+
+    pub async fn finalize_agreement(
+        &self,
+        agreement: &AgreementView,
+        result: AgreementResult,
+    ) -> anyhow::Result<()> {
+        let requestor = self
+            .requestors
+            .get(&agreement.requestor_id()?)
+            .ok_or(anyhow!("No Requestor"))?;
+        let provider = self
+            .providers
+            .get(&agreement.provider_id()?)
+            .ok_or(anyhow!("No Provider"))?;
+
+        // First call both functions and resolve errors later. We don't want
+        // to omit any of these calls.
+        let prov_result = requestor
+            .agreement_finalized(&agreement.id, result.clone())
+            .await;
+        let req_result = provider.agreement_finalized(&agreement.id, result).await;
+
+        prov_result?;
+        req_result?;
+        Ok(())
+    }
 }
 
 trait NegotiationResponseProcessor: Future<Output = ()> + Sized + 'static {}

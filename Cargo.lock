@@ -1571,9 +1571,11 @@ name = "ya-negotiator-component"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "lazy_static",
  "log",
  "log-derive",
  "serde",
+ "serde_yaml",
  "ya-agreement-utils",
  "ya-client-model",
 ]

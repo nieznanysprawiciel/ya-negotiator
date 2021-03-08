@@ -9,7 +9,7 @@ use crate::Negotiator;
 use ya_negotiator_shared_lib_interface::SharedLibNegotiator;
 
 use ya_negotiator_component::component::NegotiatorComponent;
-use ya_negotiator_component::NegotiatorsPack;
+use ya_negotiator_component::{static_lib::create_static_negotiator, NegotiatorsPack};
 
 use crate::builtin::AcceptAll;
 use crate::builtin::LimitExpiration;
@@ -21,6 +21,7 @@ use crate::composite::NegotiatorCallbacks;
 pub enum LoadMode {
     BuiltIn,
     SharedLibrary { path: PathBuf },
+    StaticLib { library: String },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -44,6 +45,9 @@ pub fn create_negotiator(
         let negotiator = match config.load_mode {
             LoadMode::BuiltIn => create_builtin(&name, config.params)?,
             LoadMode::SharedLibrary { path } => create_shared_lib(&path, &name, config.params)?,
+            LoadMode::StaticLib { library } => {
+                create_static_negotiator(&format!("{}::{}", &library, &name), config.params)?
+            }
         };
 
         components = components.add_component(&name, negotiator);

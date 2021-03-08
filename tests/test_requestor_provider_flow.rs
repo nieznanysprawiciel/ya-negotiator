@@ -2,7 +2,6 @@ use chrono::{DateTime, Utc};
 
 use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
 use ya_builtin_negotiators::*;
-use ya_negotiator_component::AgreementResult;
 use ya_negotiators::factory::*;
 use ya_negotiators_testing::Framework;
 
@@ -68,12 +67,13 @@ async fn test_requestor_provider_flow() {
         .await
         .unwrap();
 
-    println!("{:#?}", result);
-    framework
-        .run_finalize_agreement(
-            &result.agreement.unwrap(),
-            AgreementResult::ClosedByRequestor,
-        )
-        .await
-        .unwrap();
+    println!("{}", result);
+    // framework
+    //     .run_finalize_agreement(
+    //         &result.agreement.unwrap(),
+    //         AgreementResult::ClosedByRequestor,
+    //     )
+    //     .await
+    //     .unwrap();
+    //assert!(false);
 }

@@ -1,16 +1,19 @@
 use anyhow::*;
+use chrono::{Duration, Utc};
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
-
-use chrono::{Duration, Utc};
 use std::sync::Arc;
+use tokio::sync::broadcast;
+
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_client_model::market::agreement::State as AgreementState;
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{Agreement, Demand, DemandOfferBase, Offer, Proposal};
 use ya_client_model::NodeId;
 use ya_negotiators::factory::{create_negotiator, NegotiatorsConfig};
-use ya_negotiators::{AgreementResponse, AgreementResult, NegotiatorAddr, ProposalResponse};
+use ya_negotiators::{
+    AgreementAction, AgreementResult, NegotiatorAddr, NegotiatorCallbacks, ProposalAction,
+};
 
 pub enum NodeType {
     Provider,
@@ -21,18 +24,53 @@ pub struct Node {
     pub negotiator: Arc<NegotiatorAddr>,
     pub node_id: NodeId,
     pub node_type: NodeType,
+
+    pub agreement_sender: broadcast::Sender<AgreementAction>,
+    pub proposal_sender: broadcast::Sender<ProposalAction>,
 }
 
 impl Node {
-    pub fn new(config: NegotiatorsConfig, node_type: NodeType) -> anyhow::Result<Node> {
-        let negotiator = create_negotiator(config)?;
+    pub fn new(config: NegotiatorsConfig, node_type: NodeType) -> anyhow::Result<Arc<Node>> {
+        let (negotiator, callbacks) = create_negotiator(config)?;
         let node_id = generate_identity();
 
-        Ok(Node {
-            node_id,
+        let (agreement_sender, _) = broadcast::channel(16);
+        let (proposal_sender, _) = broadcast::channel(16);
+
+        let node = Node {
+            node_id: node_id.clone(),
             negotiator,
             node_type,
-        })
+            proposal_sender: proposal_sender.clone(),
+            agreement_sender: agreement_sender.clone(),
+        };
+
+        let NegotiatorCallbacks {
+            proposal_channel: mut proposal,
+            agreement_channel: mut agreement,
+        } = callbacks;
+
+        tokio::task::spawn(async move {
+            while let Some(action) = proposal.recv().await {
+                proposal_sender.send(action).ok();
+            }
+        });
+
+        tokio::task::spawn(async move {
+            while let Some(action) = agreement.recv().await {
+                agreement_sender.send(action).ok();
+            }
+        });
+
+        Ok(Arc::new(node))
+    }
+
+    pub fn agreement_channel(&self) -> broadcast::Receiver<AgreementAction> {
+        self.agreement_sender.subscribe()
+    }
+
+    pub fn proposal_channel(&self) -> broadcast::Receiver<ProposalAction> {
+        self.proposal_sender.subscribe()
     }
 
     pub async fn create_offer(&self, template: &OfferTemplate) -> Result<Proposal> {
@@ -49,17 +87,18 @@ impl Node {
         &self,
         incoming_proposal: &Proposal,
         our_prev_proposal: &Proposal,
-    ) -> Result<ProposalResponse> {
+    ) -> Result<()> {
         self.negotiator
             .react_to_proposal(incoming_proposal, our_prev_proposal)
             .await
     }
 
-    pub async fn react_to_agreement(
-        &self,
-        agreement_view: &AgreementView,
-    ) -> Result<AgreementResponse> {
+    pub async fn react_to_agreement(&self, agreement_view: &AgreementView) -> Result<()> {
         self.negotiator.react_to_agreement(agreement_view).await
+    }
+
+    pub async fn agreement_signed(&self, agreement_view: &AgreementView) -> Result<()> {
+        self.negotiator.agreement_signed(agreement_view).await
     }
 
     pub async fn agreement_finalized(
@@ -82,6 +121,18 @@ impl Node {
             timestamp: Utc::now(),
             prev_proposal_id: None,
         }
+    }
+
+    /// In case of accept Proposal, we use the same Proposal as we sent
+    /// previously, but with new id.
+    pub fn recounter_proposal(&self, id: &str, out_prev_proposal: &Proposal) -> Proposal {
+        let mut new_proposal = out_prev_proposal.clone();
+        new_proposal.prev_proposal_id = Some(id.to_string());
+        new_proposal.proposal_id = generate_id();
+        new_proposal.issuer_id = self.node_id; // To be sure
+        new_proposal.state = State::Draft;
+        new_proposal.timestamp = Utc::now();
+        new_proposal
     }
 
     pub fn create_agreement(

@@ -2,9 +2,9 @@ mod composite;
 pub mod factory;
 mod negotiators;
 
-pub use composite::CompositeNegotiator;
+pub use composite::{Negotiator, NegotiatorCallbacks};
 
-pub use negotiators::{AgreementResponse, Negotiator, NegotiatorAddr, ProposalResponse};
+pub use negotiators::{AgreementAction, NegotiatorAddr, ProposalAction};
 
 pub use ya_negotiator_component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack,

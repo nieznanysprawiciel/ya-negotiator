@@ -1,281 +1,207 @@
-use ya_agreement_utils::{AgreementView, OfferTemplate};
+use ya_agreement_utils::OfferTemplate;
 use ya_negotiators::factory::*;
-use ya_negotiators::{AgreementResponse, AgreementResult, ProposalResponse};
 
-use ya_client_model::market::proposal::State;
 use ya_client_model::market::Proposal;
+use ya_client_model::NodeId;
 
+use crate::negotiation_record::{NegotiationRecord, NegotiationRecordSync};
 use crate::node::{Node, NodeType};
+use crate::provider::{provider_agreements_processor, provider_proposals_processor};
+use crate::requestor::{requestor_agreements_processor, requestor_proposals_processor};
 
-use anyhow::anyhow;
-use serde::{Deserialize, Serialize};
-use std::convert::TryFrom;
+use futures::future::select_all;
+use futures::{Future, FutureExt};
+use std::collections::HashMap;
 use std::fmt;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum NegotiationStage {
-    Initial,
-    Proposal { last_response: ProposalResponse },
-    Agreement { last_response: AgreementResponse },
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct NegotiationResult {
-    pub stage: NegotiationStage,
-    pub proposals: Vec<Proposal>,
-    pub agreement: Option<AgreementView>,
-}
+use std::sync::Arc;
+use std::time::Duration;
+use tokio::task::JoinHandle;
+use tokio::time::timeout;
 
 #[derive(thiserror::Error)]
 #[error("{error}\nNegotiation traceback:\n\n{negotiation_traceback}")]
 pub struct FrameworkError {
     error: anyhow::Error,
-    negotiation_traceback: NegotiationResult,
+    negotiation_traceback: NegotiationRecord,
 }
 
 /// Emulates running negotiations between Requestor and Provider.
 /// TODO: Support for multiple Provider/Requestor Negotiators at the same time.
 pub struct Framework {
-    pub requestor: Node,
-    pub provider: Node,
+    pub requestors: HashMap<NodeId, Arc<Node>>,
+    pub providers: HashMap<NodeId, Arc<Node>>,
 }
 
 impl Framework {
+    pub fn new_empty() -> anyhow::Result<Framework> {
+        Ok(Framework {
+            requestors: HashMap::new(),
+            providers: HashMap::new(),
+        })
+    }
+
     pub fn new(
         prov_config: NegotiatorsConfig,
         req_config: NegotiatorsConfig,
     ) -> anyhow::Result<Framework> {
-        Ok(Framework {
-            requestor: Node::new(req_config, NodeType::Requestor)?,
-            provider: Node::new(prov_config, NodeType::Provider)?,
-        })
+        let framework = Self::new_empty()?
+            .add_provider(prov_config)?
+            .add_requestor(req_config)?;
+
+        Ok(framework)
+    }
+
+    pub fn add_provider(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
+        let node = Node::new(config, NodeType::Provider)?;
+        self.providers.insert(node.node_id, node);
+        Ok(self)
+    }
+
+    pub fn add_requestor(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
+        let node = Node::new(config, NodeType::Requestor)?;
+        self.requestors.insert(node.node_id, node);
+        Ok(self)
     }
 
     pub async fn run_for_templates(
         &self,
         demand: OfferTemplate,
         offer: OfferTemplate,
-    ) -> Result<NegotiationResult, FrameworkError> {
-        let offer = self
-            .provider
-            .create_offer(&offer)
-            .await
-            .map_err(|e| FrameworkError::from(e, &NegotiationResult::new()))?;
-        let demand = self
-            .requestor
-            .create_offer(&demand)
-            .await
-            .map_err(|e| FrameworkError::from(e, &NegotiationResult::new()))?;
+    ) -> Result<NegotiationRecord, FrameworkError> {
+        let record = NegotiationRecordSync::new(30);
 
-        self.run_for_offers(demand, offer).await
-    }
-
-    /// Negotiators should have offers already created. This functions emulates
-    /// negotiations, when negotiators continue negotiations with new Nodes, without
-    /// resubscribing Offers/Demands.
-    pub async fn run_for_offers(
-        &self,
-        demand: Proposal,
-        offer: Proposal,
-    ) -> Result<NegotiationResult, FrameworkError> {
-        let result = self.run_negotiation_phase(demand, offer).await?;
-        self.run_agreement_phase(result).await
-    }
-
-    pub async fn run_finalize_agreement(
-        &self,
-        agreement: &AgreementView,
-        result: AgreementResult,
-    ) -> anyhow::Result<()> {
-        // First call both functions and resolve errors later. We don't want
-        // to omit any of these calls.
-        let prov_result = self
-            .requestor
-            .agreement_finalized(&agreement.id, result.clone())
-            .await;
-        let req_result = self
-            .provider
-            .agreement_finalized(&agreement.id, result)
-            .await;
-
-        prov_result?;
-        req_result?;
-        Ok(())
-    }
-
-    pub async fn run_negotiation_phase(
-        &self,
-        demand: Proposal,
-        offer: Proposal,
-    ) -> Result<NegotiationResult, FrameworkError> {
-        let mut result = NegotiationResult {
-            proposals: vec![demand.clone(), offer.clone()],
-            stage: NegotiationStage::Initial,
-            agreement: None,
-        };
-
-        let mut prev_requestor_proposal = demand;
-        let mut prev_provider_proposal = offer;
-
-        let max_negotiation_steps = 20;
-
-        for _ in 0..max_negotiation_steps {
-            let response = self
-                .requestor
-                .react_to_proposal(&prev_provider_proposal, &prev_requestor_proposal)
-                .await
-                .map_err(|e| FrameworkError::from(e, &result))?;
-            let req_proposal = match &response {
-                // Move to Agreement phase. Accepting on Requestor side doesn't generate new Proposal.
-                // Agreement will be proposed for last Provider's Proposal.
-                ProposalResponse::AcceptProposal => {
-                    result.stage = NegotiationStage::Proposal {
-                        last_response: response,
-                    };
-                    return Ok(result);
-                }
-                ProposalResponse::CounterProposal { offer } => {
-                    let proposal = self.requestor.into_proposal(offer.clone(), State::Draft);
-
-                    result.proposals.push(proposal.clone());
-                    result.stage = NegotiationStage::Proposal {
-                        last_response: response,
-                    };
-                    proposal
-                }
-                ProposalResponse::IgnoreProposal | ProposalResponse::RejectProposal { .. } => {
-                    result.stage = NegotiationStage::Proposal {
-                        last_response: response,
-                    };
-                    return Ok(result);
-                }
-            };
-
-            // After Requestor counters Provider's Proposal for the first time,
-            // it is no longer in Initial state.
-            prev_provider_proposal.state = State::Draft;
-
-            let response = self
-                .provider
-                .react_to_proposal(&req_proposal, &prev_provider_proposal)
-                .await
-                .map_err(|e| FrameworkError::from(e, &result))?;
-            let prov_proposal = match &response {
-                ProposalResponse::CounterProposal { offer } => {
-                    let proposal = self.provider.into_proposal(offer.clone(), State::Draft);
-
-                    result.proposals.push(proposal.clone());
-                    result.stage = NegotiationStage::Proposal {
-                        last_response: response,
-                    };
-                    proposal
-                }
-                ProposalResponse::AcceptProposal => {
-                    result.proposals.push(prev_provider_proposal.clone());
-                    result.stage = NegotiationStage::Proposal {
-                        last_response: response,
-                    };
-                    prev_provider_proposal.clone()
-                }
-                ProposalResponse::RejectProposal { .. } | ProposalResponse::IgnoreProposal => {
-                    result.stage = NegotiationStage::Proposal {
-                        last_response: response,
-                    };
-                    return Ok(result);
-                }
-            };
-
-            prev_requestor_proposal = req_proposal;
-            prev_provider_proposal = prov_proposal;
+        let mut offers = vec![];
+        for (_, provider) in &self.providers {
+            offers.push(
+                provider
+                    .create_offer(&offer)
+                    .await
+                    .map_err(|e| FrameworkError::from(e, &record))?,
+            )
         }
 
-        return Err(FrameworkError::from(anyhow!(
-            "Exceeded negotiation loops limit ({}). Probably your negotiators have wrong stop conditions.",
-            max_negotiation_steps
-        ), &result));
+        let mut demands = vec![];
+        for (_, requestor) in &self.requestors {
+            demands.push(
+                requestor
+                    .create_offer(&demand)
+                    .await
+                    .map_err(|e| FrameworkError::from(e, &record))?,
+            )
+        }
+
+        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(10));
+        self.init_for(offers, demands, record.clone()).await;
+
+        processors_handle
+            .await
+            .map_err(|e| FrameworkError::from(e, &record))?;
+
+        let record = record.0.lock().unwrap();
+        Ok(record.clone())
     }
 
-    pub async fn run_agreement_phase(
+    // Will start negotiations for all pairs of Offer/Demand.
+    pub async fn init_for(
         &self,
-        mut result: NegotiationResult,
-    ) -> Result<NegotiationResult, FrameworkError> {
-        match &result.stage {
-            NegotiationStage::Proposal { last_response } => match last_response {
-                // This is the only correct state in which we should try to propose Agreement.
-                // Otherwise we can just return from this function.
-                ProposalResponse::AcceptProposal => (),
-                _ => return Ok(result),
-            },
-            _ => return Ok(result),
-        };
+        offers: Vec<Proposal>,
+        demands: Vec<Proposal>,
+        record: NegotiationRecordSync,
+    ) {
+        for demand in demands {
+            // Each Offer Proposal generated for Requestor will have this single
+            // Proposal set as `prev_proposal_id`
+            record.add_proposal(demand.clone());
 
-        let agreement_view = AgreementView::try_from(&self.requestor.create_agreement(
-            &result.proposals[result.proposals.len() - 2],
-            &result.proposals[result.proposals.len() - 1],
-        ))
-        .map_err(|e| FrameworkError::from(e, &result))?;
+            for offer in &offers {
+                //TODO: We should do Offer/Demand matching here.
+                let requestor = self.requestors.get(&demand.issuer_id).unwrap();
+                let mut p_proposal = offer.clone();
+                p_proposal.prev_proposal_id = Some(demand.proposal_id.clone());
 
-        result.agreement = Some(agreement_view.clone());
+                record.add_proposal(p_proposal.clone());
 
-        let response = self
-            .requestor
-            .react_to_agreement(&agreement_view)
-            .await
-            .map_err(|e| FrameworkError::from(e, &result))?;
-        result.stage = NegotiationStage::Agreement {
-            last_response: response.clone(),
-        };
-
-        if let AgreementResponse::RejectAgreement { .. } = &response {
-            return Ok(result);
+                if let Err(e) = requestor.react_to_proposal(&p_proposal, &demand).await {
+                    record.error(requestor.node_id, offer.issuer_id, e.into());
+                }
+            }
         }
-
-        let response = self
-            .provider
-            .react_to_agreement(&agreement_view)
-            .await
-            .map_err(|e| FrameworkError::from(e, &result))?;
-        result.stage = NegotiationStage::Agreement {
-            last_response: response.clone(),
-        };
-
-        if let AgreementResponse::RejectAgreement { .. } = &response {
-            self.requestor
-                .agreement_finalized(&agreement_view.id, AgreementResult::ApprovalFailed)
-                .await
-                .map_err(|e| FrameworkError::from(e, &result))?;
-            return Ok(result);
-        }
-
-        // Note: Provider will never get AgreementResult::ApprovalFailed, because it can happen only,
-        // if `approve_agreement` call fails.
-
-        Ok(result)
     }
+
+    fn spawn_processors(&self, record: NegotiationRecordSync, run_for: Duration) -> JoinHandle<()> {
+        tokio::spawn(
+            select_all(vec![
+                timeout(
+                    run_for,
+                    provider_proposals_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
+                )
+                .boxed(),
+                timeout(
+                    run_for,
+                    provider_agreements_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
+                )
+                .boxed(),
+                timeout(
+                    run_for,
+                    requestor_proposals_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
+                )
+                .boxed(),
+                timeout(
+                    run_for,
+                    requestor_agreements_processor(
+                        self.providers.clone(),
+                        self.requestors.clone(),
+                        record.clone(),
+                    ),
+                )
+                .boxed(),
+            ])
+            .map(|_| ()),
+        )
+    }
+
+    // pub async fn run_finalize_agreement(
+    //     &self,
+    //     agreement: &AgreementView,
+    //     result: AgreementResult,
+    // ) -> anyhow::Result<()> {
+    //     // First call both functions and resolve errors later. We don't want
+    //     // to omit any of these calls.
+    //     let prov_result = self
+    //         .requestor
+    //         .agreement_finalized(&agreement.id, result.clone())
+    //         .await;
+    //     let req_result = self
+    //         .provider
+    //         .agreement_finalized(&agreement.id, result)
+    //         .await;
+    //
+    //     prov_result?;
+    //     req_result?;
+    //     Ok(())
+    // }
 }
+
+trait NegotiationResponseProcessor: Future<Output = ()> + Sized + 'static {}
 
 impl FrameworkError {
-    pub fn from(error: impl Into<anyhow::Error>, result: &NegotiationResult) -> FrameworkError {
+    pub fn from(error: impl Into<anyhow::Error>, result: &NegotiationRecordSync) -> FrameworkError {
         FrameworkError {
             error: error.into(),
-            negotiation_traceback: result.clone(),
+            negotiation_traceback: result.0.lock().unwrap().clone(),
         }
-    }
-}
-
-impl NegotiationResult {
-    pub fn new() -> NegotiationResult {
-        NegotiationResult {
-            stage: NegotiationStage::Initial,
-            proposals: vec![],
-            agreement: None,
-        }
-    }
-}
-
-impl fmt::Display for NegotiationResult {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", serde_json::to_string_pretty(&self).unwrap())
     }
 }
 

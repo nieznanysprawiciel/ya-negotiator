@@ -1,44 +1,45 @@
 use actix::prelude::*;
-use actix::{Actor, Handler};
+use actix::Actor;
 use anyhow::Result;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
-use ya_client_model::market::{NewOffer, Proposal, Reason};
+use ya_client_model::market::{NewOffer, NewProposal, Proposal, Reason};
 
 use crate::component::AgreementResult;
+use crate::Negotiator;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
 /// Response for requestor proposals.
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[allow(dead_code)]
-pub enum ProposalResponse {
+pub enum ProposalAction {
     #[display(fmt = "CounterProposal")]
-    CounterProposal {
-        offer: NewOffer,
-    },
-    AcceptProposal,
+    CounterProposal { id: String, proposal: NewProposal },
+    #[display(fmt = "AcceptProposal")]
+    AcceptProposal { id: String },
     #[display(
-        fmt = "RejectProposal{}",
+        fmt = "RejectProposal [{}]{}",
+        id,
         "reason.as_ref().map(|r| format!(\" (reason: {})\", r)).unwrap_or(\"\".into())"
     )]
-    RejectProposal {
-        reason: Option<Reason>,
-    },
-    ///< Don't send any message to requestor. Could be useful to wait for other offers.
-    IgnoreProposal,
+    RejectProposal { id: String, reason: Option<Reason> },
 }
 
 /// Response for requestor agreements.
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[allow(dead_code)]
-pub enum AgreementResponse {
-    ApproveAgreement,
+pub enum AgreementAction {
+    ApproveAgreement {
+        id: String,
+    },
     #[display(
-        fmt = "RejectAgreement{}",
+        fmt = "RejectAgreement [{}]{}",
+        id,
         "reason.as_ref().map(|r| format!(\" (reason: {})\", r)).unwrap_or(\"\".into())"
     )]
     RejectAgreement {
+        id: String,
         reason: Option<Reason>,
     },
 }
@@ -58,7 +59,7 @@ pub struct CreateOffer {
 /// Reactions to events from market. These function make market decisions
 /// related to incoming Proposals.
 #[derive(Message)]
-#[rtype(result = "Result<ProposalResponse>")]
+#[rtype(result = "Result<()>")]
 pub struct ReactToProposal {
     /// It is new proposal that we got from other party.
     pub incoming_proposal: Proposal,
@@ -69,8 +70,15 @@ pub struct ReactToProposal {
 /// Reactions to events from market. These function make market decisions
 /// related to incoming Agreements.
 #[derive(Message)]
-#[rtype(result = "Result<AgreementResponse>")]
+#[rtype(result = "Result<()>")]
 pub struct ReactToAgreement {
+    pub agreement: AgreementView,
+}
+
+/// Agreement was successfully signed by both parties.
+#[derive(Message)]
+#[rtype(result = "Result<()>")]
+pub struct AgreementSigned {
     pub agreement: AgreementView,
 }
 
@@ -82,41 +90,17 @@ pub struct AgreementFinalized {
     pub result: AgreementResult,
 }
 
-/// Actor implementing Negotiation logic.
-///
-/// Direction:
-/// - Negotiator should asynchronously generate negotiation decisions instead
-///   of returning them as direct response to incoming events. This would allow use
-///   to implement time dependent logic like: Collect Proposals during `n` seconds
-///   and choose the best from them.
-/// - Extensibility: we expect, that developers will implement different market strategies.
-///   In best case they should be able to do this without modifying `ya-provider` code.
-///   This mean we should implement plugin-like system to communicate with external applications/code.
-/// - Multiple negotiating plugins cooperating with each other. Note that introducing new features to
-///   Agreement specification requires implementing separate negotiation logic. In this case we
-///   can end up with explosion of combination to implement. What worse, we will force external
-///   developers to adjust their logic to new Agreement features each time, when they appear.
-///   To avoid this we should design internal interfaces, which will allow to combine multiple logics
-///   as plugable components.
-pub trait Negotiator:
-    Actor
-    + Handler<CreateOffer, Result = <CreateOffer as Message>::Result>
-    + Handler<AgreementFinalized, Result = <AgreementFinalized as Message>::Result>
-    + Handler<ReactToProposal, Result = <ReactToProposal as Message>::Result>
-    + Handler<ReactToAgreement, Result = <ReactToAgreement as Message>::Result>
-{
-}
-
 #[derive(Clone)]
 pub struct NegotiatorAddr {
     pub on_create: Recipient<CreateOffer>,
     pub on_finalized: Recipient<AgreementFinalized>,
     pub on_proposal: Recipient<ReactToProposal>,
     pub on_agreement: Recipient<ReactToAgreement>,
+    pub on_agreement_signed: Recipient<AgreementSigned>,
 }
 
 impl NegotiatorAddr {
-    pub async fn create_offer(&self, template: &OfferTemplate) -> Result<NewOffer> {
+    pub async fn create_offer(&self, template: &OfferTemplate) -> Result<NewProposal> {
         self.on_create
             .send(CreateOffer {
                 offer_template: template.clone(),
@@ -128,7 +112,7 @@ impl NegotiatorAddr {
         &self,
         incoming_proposal: &Proposal,
         our_proposal: &Proposal,
-    ) -> Result<ProposalResponse> {
+    ) -> Result<()> {
         self.on_proposal
             .send(ReactToProposal {
                 incoming_proposal: incoming_proposal.clone(),
@@ -137,12 +121,17 @@ impl NegotiatorAddr {
             .await?
     }
 
-    pub async fn react_to_agreement(
-        &self,
-        agreement_view: &AgreementView,
-    ) -> Result<AgreementResponse> {
+    pub async fn react_to_agreement(&self, agreement_view: &AgreementView) -> Result<()> {
         self.on_agreement
             .send(ReactToAgreement {
+                agreement: agreement_view.clone(),
+            })
+            .await?
+    }
+
+    pub async fn agreement_signed(&self, agreement_view: &AgreementView) -> Result<()> {
+        self.on_agreement_signed
+            .send(AgreementSigned {
                 agreement: agreement_view.clone(),
             })
             .await?
@@ -161,13 +150,14 @@ impl NegotiatorAddr {
             .await?
     }
 
-    pub fn from<T: Negotiator + Actor<Context = Context<T>>>(negotiator: T) -> NegotiatorAddr {
+    pub fn from(negotiator: Negotiator) -> NegotiatorAddr {
         let addr = negotiator.start();
         NegotiatorAddr {
             on_create: addr.clone().recipient(),
             on_finalized: addr.clone().recipient(),
             on_proposal: addr.clone().recipient(),
-            on_agreement: addr.recipient(),
+            on_agreement: addr.clone().recipient(),
+            on_agreement_signed: addr.clone().recipient(),
         }
     }
 }
@@ -178,23 +168,31 @@ mod tests {
 
     #[test]
     fn test_proposal_response_display() {
-        let reason = ProposalResponse::RejectProposal {
+        let reason = ProposalAction::RejectProposal {
+            id: "".to_string(),
             reason: Some("zima".into()),
         };
-        let no_reason = ProposalResponse::RejectProposal { reason: None };
+        let no_reason = ProposalAction::RejectProposal {
+            id: "".to_string(),
+            reason: None,
+        };
 
-        assert_eq!(reason.to_string(), "RejectProposal (reason: 'zima')");
-        assert_eq!(no_reason.to_string(), "RejectProposal");
+        assert_eq!(reason.to_string(), "RejectProposal [] (reason: 'zima')");
+        assert_eq!(no_reason.to_string(), "RejectProposal []");
     }
 
     #[test]
     fn test_agreement_response_display() {
-        let reason = AgreementResponse::RejectAgreement {
+        let reason = AgreementAction::RejectAgreement {
+            id: "".to_string(),
             reason: Some("lato".into()),
         };
-        let no_reason = AgreementResponse::RejectAgreement { reason: None };
+        let no_reason = AgreementAction::RejectAgreement {
+            id: "".to_string(),
+            reason: None,
+        };
 
-        assert_eq!(reason.to_string(), "RejectAgreement (reason: 'lato')");
-        assert_eq!(no_reason.to_string(), "RejectAgreement");
+        assert_eq!(reason.to_string(), "RejectAgreement [] (reason: 'lato')");
+        assert_eq!(no_reason.to_string(), "RejectAgreement []");
     }
 }

@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::fmt::{Error as FormatError, Formatter};
 use std::path::PathBuf;
+use ya_client_model::NodeId;
 
 pub const PROPERTY_TAG: &str = "@tag";
 const DEFAULT_FORMAT: &str = "json";
@@ -56,6 +58,14 @@ impl AgreementView {
             .collect();
         Ok(map)
     }
+
+    pub fn requestor_id(&self) -> Result<NodeId, Error> {
+        self.pointer_typed("/demand/requestorId")
+    }
+
+    pub fn provider_id(&self) -> Result<NodeId, Error> {
+        self.pointer_typed("/offer/providerId")
+    }
 }
 
 impl TryFrom<Value> for AgreementView {
@@ -87,6 +97,25 @@ impl TryFrom<&Agreement> for AgreementView {
 
     fn try_from(agreement: &Agreement) -> Result<Self, Self::Error> {
         Self::try_from(expand(serde_json::to_value(agreement)?))
+    }
+}
+
+impl<'a> std::fmt::Display for AgreementView {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FormatError> {
+        let mut agreement = self.json.clone();
+
+        if let Some(props) = agreement.pointer_mut("/offer/properties") {
+            *props = flatten_value(props.clone());
+        }
+        if let Some(props) = agreement.pointer_mut("/demand/properties") {
+            *props = flatten_value(props.clone());
+        }
+
+        // Display not pretty version as fallback.
+        match serde_json::to_string_pretty(&agreement) {
+            Ok(json) => write!(f, "{}", json),
+            Err(_) => write!(f, "{}", self.json),
+        }
     }
 }
 
@@ -263,6 +292,10 @@ fn flatten_inner(prefix: String, result: &mut Map<String, Value>, value: Value) 
             result.insert(prefix, v);
         }
     }
+}
+
+pub fn flatten_value(value: Value) -> serde_json::Value {
+    serde_json::Value::Object(flatten(value))
 }
 
 #[cfg(test)]

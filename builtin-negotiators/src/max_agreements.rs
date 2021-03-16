@@ -4,10 +4,11 @@ use std::collections::HashSet;
 
 use ya_client_model::market::Reason;
 
-use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
+use ya_agreement_utils::{AgreementView, ProposalView};
 use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
+use ya_negotiator_component::transparent_impl;
 
 /// Negotiator that can limit number of running agreements.
 pub struct MaxAgreements {
@@ -61,10 +62,6 @@ impl NegotiatorComponent for MaxAgreements {
         Ok(result)
     }
 
-    fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate> {
-        Ok(offer_template)
-    }
-
     fn on_agreement_terminated(
         &mut self,
         agreement_id: &str,
@@ -89,4 +86,8 @@ impl NegotiatorComponent for MaxAgreements {
             )
         }
     }
+
+    transparent_impl!(fill_template);
+    transparent_impl!(on_proposal_rejected);
+    transparent_impl!(on_post_terminate_event);
 }

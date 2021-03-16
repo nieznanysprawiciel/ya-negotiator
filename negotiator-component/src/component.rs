@@ -46,12 +46,14 @@ pub enum NegotiationResult {
 }
 
 /// Result of agreement execution.
+#[non_exhaustive]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum AgreementResult {
     /// Failed to approve agreement. (Agreement even wasn't created).
     /// It can happen for Provider in case call to `approve_agreement` will fail.
     /// For Requestor it happens, when Agreement gets rejected or it's creation/sending fails.
     /// TODO: Maybe we should distinguish these cases with enum??
+    /// TODO: We should pass rejection Reason.
     ApprovalFailed,
     /// Agreement was finished with success after first Activity.
     ClosedByProvider,
@@ -59,6 +61,20 @@ pub enum AgreementResult {
     ClosedByRequestor,
     /// Agreement was broken by one party. It indicates non successful end of Agreement.
     Broken { reason: Option<Reason> },
+}
+
+/// Notification about things happening with Agreement after it's termination.
+#[non_exhaustive]
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub enum PostTerminateEvent {
+    InvoiceAccepted,
+    /// Could be partially paid??
+    InvoicePaid,
+    InvoiceRejected,
+    /// Provider/Requestor is unreachable, so we can't send terminate Agreement.
+    UnableToTerminate,
+    ComputationFailure(serde_json::Value),
+    Custom(serde_json::Value),
 }
 
 /// `NegotiatorComponent` implements negotiation logic for part of Agreement
@@ -102,4 +118,76 @@ pub trait NegotiatorComponent {
     /// `NegotiatorComponent` can't reject Agreement anymore.
     /// TODO: Can negotiator find out from which Proposals is this Agreement created??
     fn on_agreement_approved(&mut self, agreement: &AgreementView) -> anyhow::Result<()>;
+
+    /// Called when other party rejects our Proposal.
+    fn on_proposal_rejected(&mut self, proposal_id: &str) -> anyhow::Result<()>;
+
+    /// Notifies `NegotiatorComponent`, about events related to Agreement appearing after
+    /// it's termination.
+    fn on_post_terminate_event(
+        &mut self,
+        agreement_id: &str,
+        event: &PostTerminateEvent,
+    ) -> anyhow::Result<()>;
+}
+
+/// Generates transparent implementation of selected function, which
+/// does something neutral (Does nothing but in the way that doesn't affect rest
+/// of negotiations).
+#[macro_export]
+macro_rules! transparent_impl {
+    (on_post_terminate_event) => {
+        fn on_post_terminate_event(
+            &mut self,
+            _agreement_id: &str,
+            _event: &ya_negotiator_component::component::PostTerminateEvent,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    };
+    (negotiate_step) => {
+        fn negotiate_step(
+            &mut self,
+            _demand: &ya_agreement_utils::ProposalView,
+            offer: ya_agreement_utils::ProposalView,
+            score: ya_negotiator_component::component::Score,
+        ) -> anyhow::Result<ya_negotiator_component::component::NegotiationResult> {
+            Ok(
+                ya_negotiator_component::component::NegotiationResult::Ready {
+                    proposal: offer,
+                    score,
+                },
+            )
+        }
+    };
+    (fill_template) => {
+        fn fill_template(
+            &mut self,
+            offer_template: ya_agreement_utils::OfferTemplate,
+        ) -> anyhow::Result<ya_agreement_utils::OfferTemplate> {
+            Ok(offer_template)
+        }
+    };
+    (on_agreement_terminated) => {
+        fn on_agreement_terminated(
+            &mut self,
+            _agreement_id: &str,
+            _result: &ya_negotiator_component::component::AgreementResult,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    };
+    (on_agreement_approved) => {
+        fn on_agreement_approved(
+            &mut self,
+            _agreement: &ya_agreement_utils::AgreementView,
+        ) -> anyhow::Result<()> {
+            Ok(())
+        }
+    };
+    (on_proposal_rejected) => {
+        fn on_proposal_rejected(&mut self, _proposal_id: &str) -> anyhow::Result<()> {
+            Ok(())
+        }
+    };
 }

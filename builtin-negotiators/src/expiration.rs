@@ -2,11 +2,10 @@ use anyhow::Result;
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
-use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
+use ya_agreement_utils::ProposalView;
 use ya_client_model::market::Reason;
-use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
-};
+use ya_negotiator_component::component::{NegotiationResult, NegotiatorComponent, Score};
+use ya_negotiator_component::transparent_impl;
 
 /// Negotiator that can limit number of running agreements.
 pub struct LimitExpiration {
@@ -74,19 +73,9 @@ impl NegotiatorComponent for LimitExpiration {
         Ok(result)
     }
 
-    fn fill_template(&mut self, offer_template: OfferTemplate) -> anyhow::Result<OfferTemplate> {
-        Ok(offer_template)
-    }
-
-    fn on_agreement_terminated(
-        &mut self,
-        _agreement_id: &str,
-        _result: &AgreementResult,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn on_agreement_approved(&mut self, _agreement: &AgreementView) -> anyhow::Result<()> {
-        Ok(())
-    }
+    transparent_impl!(fill_template);
+    transparent_impl!(on_agreement_terminated);
+    transparent_impl!(on_agreement_approved);
+    transparent_impl!(on_proposal_rejected);
+    transparent_impl!(on_post_terminate_event);
 }

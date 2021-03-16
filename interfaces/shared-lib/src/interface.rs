@@ -85,6 +85,14 @@ pub trait SharedNegotiatorAPI {
     /// Called when Negotiator decided to approve/propose Agreement. It's only notification,
     /// `NegotiatorComponent` can't reject Agreement anymore.
     fn on_agreement_approved(&mut self, agreement: &RStr) -> RResult<(), RString>;
+
+    fn on_proposal_rejected(&mut self, proposal_id: &RStr) -> RResult<(), RString>;
+
+    fn on_post_terminate_event(
+        &mut self,
+        agreement_id: &RStr,
+        event: &RStr,
+    ) -> RResult<(), RString>;
 }
 
 pub type BoxedSharedNegotiatorAPI = SharedNegotiatorAPI_TO<'static, RBox<()>>;

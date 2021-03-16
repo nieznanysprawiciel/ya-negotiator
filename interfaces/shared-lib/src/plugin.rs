@@ -13,6 +13,7 @@ pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
+pub use ya_negotiator_component::transparent_impl;
 
 pub trait NegotiatorConstructor<T: NegotiatorComponent + Sync + Send + Sized>: Sync + Send {
     fn new(name: &str, config: serde_yaml::Value) -> anyhow::Result<T>;
@@ -130,6 +131,35 @@ where
             self.component
                 .on_agreement_approved(&agreement)
                 .map_err(|e| SharedLibError::Negotiation(e.to_string()))
+        })() {
+            Ok(_) => ROk(()),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+
+    fn on_proposal_rejected(&mut self, proposal_id: &RStr) -> RResult<(), RString> {
+        match (|| {
+            self.component
+                .on_proposal_rejected(proposal_id.as_str())
+                .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
+            Result::<(), SharedLibError>::Ok(())
+        })() {
+            Ok(_) => ROk(()),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+
+    fn on_post_terminate_event(
+        &mut self,
+        agreement_id: &RStr,
+        event: &RStr,
+    ) -> RResult<(), RString> {
+        match (|| {
+            let result = serde_json::from_str(event.as_str()).map_err(SharedLibError::from)?;
+            self.component
+                .on_post_terminate_event(agreement_id.as_str(), &result)
+                .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
+            Result::<(), SharedLibError>::Ok(())
         })() {
             Ok(_) => ROk(()),
             Err(e) => RResult::RErr(RString::from(e.to_string())),

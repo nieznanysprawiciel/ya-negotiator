@@ -3,6 +3,7 @@ use std::path::Path;
 
 use crate::interface::{load_library, BoxedSharedNegotiatorAPI};
 
+use serde_json::Value;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, PostTerminateEvent, Score,
@@ -125,5 +126,20 @@ impl NegotiatorComponent for SharedLibNegotiator {
             .on_post_terminate_event(&RStr::from_str(&agreement_id), &RStr::from_str(&event))
             .into_result()
             .map_err(|e| SharedLibError::Negotiation(e.into_string()))?)
+    }
+
+    fn control_event(
+        &mut self,
+        component: &str,
+        params: Value,
+    ) -> anyhow::Result<serde_json::Value> {
+        let params = serde_json::to_string(&params).map_err(SharedLibError::from)?;
+        let result = self
+            .negotiator
+            .control_event(&RStr::from_str(&component), &RStr::from_str(&params))
+            .into_result()
+            .map_err(|e| SharedLibError::Negotiation(e.into_string()))?;
+
+        Ok(serde_json::from_str(result.as_str()).map_err(SharedLibError::from)?)
     }
 }

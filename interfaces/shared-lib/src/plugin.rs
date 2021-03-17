@@ -165,6 +165,23 @@ where
             Err(e) => RResult::RErr(RString::from(e.to_string())),
         }
     }
+
+    fn control_event(&mut self, component: &RStr, params: &RStr) -> RResult<RString, RString> {
+        match (|| {
+            let params = serde_json::from_str(params.as_str()).map_err(SharedLibError::from)?;
+            let response = self
+                .component
+                .control_event(component.as_str(), params)
+                .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
+
+            Result::<String, SharedLibError>::Ok(
+                serde_json::to_string(&response).map_err(SharedLibError::from)?,
+            )
+        })() {
+            Ok(response) => ROk(RString::from(response)),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
 }
 
 type ConstructorFunction =

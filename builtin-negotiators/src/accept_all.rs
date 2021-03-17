@@ -17,4 +17,5 @@ impl NegotiatorComponent for AcceptAll {
     transparent_impl!(on_agreement_approved);
     transparent_impl!(on_proposal_rejected);
     transparent_impl!(on_post_terminate_event);
+    transparent_impl!(control_event);
 }

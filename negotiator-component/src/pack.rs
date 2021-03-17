@@ -1,4 +1,5 @@
 use anyhow::anyhow;
+use serde_json::Value;
 use std::collections::HashMap;
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
@@ -170,5 +171,16 @@ impl NegotiatorComponent for NegotiatorsPack {
                 .ok();
         }
         Ok(())
+    }
+
+    fn control_event(
+        &mut self,
+        component: &str,
+        params: Value,
+    ) -> anyhow::Result<serde_json::Value> {
+        match self.components.get_mut(component) {
+            None => Ok(serde_json::Value::Null),
+            Some(negotiator) => negotiator.control_event(component, params),
+        }
     }
 }

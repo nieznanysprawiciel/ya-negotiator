@@ -93,6 +93,8 @@ pub trait SharedNegotiatorAPI {
         agreement_id: &RStr,
         event: &RStr,
     ) -> RResult<(), RString>;
+
+    fn control_event(&mut self, component: &RStr, params: &RStr) -> RResult<RString, RString>;
 }
 
 pub type BoxedSharedNegotiatorAPI = SharedNegotiatorAPI_TO<'static, RBox<()>>;

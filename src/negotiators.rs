@@ -4,11 +4,12 @@ use anyhow::Result;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
 
+use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_client_model::market::{NewOffer, NewProposal, Proposal, Reason};
 
 use crate::component::AgreementResult;
 use crate::Negotiator;
-use ya_agreement_utils::{AgreementView, OfferTemplate};
+use ya_negotiator_component::component::PostTerminateEvent;
 
 /// Response for requestor proposals.
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
@@ -90,18 +91,37 @@ pub struct AgreementFinalized {
     pub result: AgreementResult,
 }
 
-#[derive(Clone)]
-pub struct NegotiatorAddr {
-    pub on_create: Recipient<CreateOffer>,
-    pub on_finalized: Recipient<AgreementFinalized>,
-    pub on_proposal: Recipient<ReactToProposal>,
-    pub on_agreement: Recipient<ReactToAgreement>,
-    pub on_agreement_signed: Recipient<AgreementSigned>,
+/// Notification about what happened to Agreement after termination.
+#[derive(Message)]
+#[rtype(result = "Result<()>")]
+pub struct PostAgreementEvent {
+    pub agreement_id: String,
+    pub event: PostTerminateEvent,
 }
+
+/// Proposal was rejected by other party.
+#[derive(Message)]
+#[rtype(result = "Result<()>")]
+pub struct ProposalRejected {
+    pub proposal_id: String,
+    pub reason: Option<Reason>,
+}
+
+/// Message for controlling chosen component.
+#[derive(Message)]
+#[rtype(result = "Result<serde_json::Value>")]
+pub struct ControlEvent {
+    pub component: String,
+    pub params: serde_json::Value,
+}
+
+// TODO: Consider, if this struct is helpful at all and remove if not.
+#[derive(Clone)]
+pub struct NegotiatorAddr(pub Addr<Negotiator>);
 
 impl NegotiatorAddr {
     pub async fn create_offer(&self, template: &OfferTemplate) -> Result<NewProposal> {
-        self.on_create
+        self.0
             .send(CreateOffer {
                 offer_template: template.clone(),
             })
@@ -113,7 +133,7 @@ impl NegotiatorAddr {
         incoming_proposal: &Proposal,
         our_proposal: &Proposal,
     ) -> Result<()> {
-        self.on_proposal
+        self.0
             .send(ReactToProposal {
                 incoming_proposal: incoming_proposal.clone(),
                 our_prev_proposal: our_proposal.clone(),
@@ -122,7 +142,7 @@ impl NegotiatorAddr {
     }
 
     pub async fn react_to_agreement(&self, agreement_view: &AgreementView) -> Result<()> {
-        self.on_agreement
+        self.0
             .send(ReactToAgreement {
                 agreement: agreement_view.clone(),
             })
@@ -130,7 +150,7 @@ impl NegotiatorAddr {
     }
 
     pub async fn agreement_signed(&self, agreement_view: &AgreementView) -> Result<()> {
-        self.on_agreement_signed
+        self.0
             .send(AgreementSigned {
                 agreement: agreement_view.clone(),
             })
@@ -142,7 +162,7 @@ impl NegotiatorAddr {
         agreement_id: &str,
         result: AgreementResult,
     ) -> Result<()> {
-        self.on_finalized
+        self.0
             .send(AgreementFinalized {
                 agreement_id: agreement_id.to_string(),
                 result,
@@ -150,15 +170,47 @@ impl NegotiatorAddr {
             .await?
     }
 
+    pub async fn proposal_rejected(
+        &self,
+        proposal_id: &str,
+        reason: &Option<Reason>,
+    ) -> Result<()> {
+        self.0
+            .send(ProposalRejected {
+                proposal_id: proposal_id.to_string(),
+                reason: reason.clone(),
+            })
+            .await?
+    }
+
+    pub async fn post_agreement_event(
+        &self,
+        agreement_id: &str,
+        event: PostTerminateEvent,
+    ) -> Result<()> {
+        self.0
+            .send(PostAgreementEvent {
+                agreement_id: agreement_id.to_string(),
+                event,
+            })
+            .await?
+    }
+
+    pub async fn control_event(
+        &self,
+        component: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value> {
+        self.0
+            .send(ControlEvent {
+                component: component.to_string(),
+                params,
+            })
+            .await?
+    }
+
     pub fn from(negotiator: Negotiator) -> NegotiatorAddr {
-        let addr = negotiator.start();
-        NegotiatorAddr {
-            on_create: addr.clone().recipient(),
-            on_finalized: addr.clone().recipient(),
-            on_proposal: addr.clone().recipient(),
-            on_agreement: addr.clone().recipient(),
-            on_agreement_signed: addr.clone().recipient(),
-        }
+        NegotiatorAddr(negotiator.start())
     }
 }
 

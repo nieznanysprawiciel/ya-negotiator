@@ -120,6 +120,9 @@ pub trait NegotiatorComponent {
     fn on_agreement_approved(&mut self, agreement: &AgreementView) -> anyhow::Result<()>;
 
     /// Called when other party rejects our Proposal.
+    /// TODO: We should call this, if any of our components rejected Proposal either.
+    ///       Add flag that will indicate who rejected.
+    /// TODO: Add Reason parameter.
     fn on_proposal_rejected(&mut self, proposal_id: &str) -> anyhow::Result<()>;
 
     /// Notifies `NegotiatorComponent`, about events related to Agreement appearing after
@@ -129,6 +132,15 @@ pub trait NegotiatorComponent {
         agreement_id: &str,
         event: &PostTerminateEvent,
     ) -> anyhow::Result<()>;
+
+    /// Allows to control `NegotiatorComponent's` behavior or query any information
+    /// from it. Thanks to this event Requestor/Provider implementation can interact with
+    /// `NegotiatorComponents`.
+    fn control_event(
+        &mut self,
+        component: &str,
+        params: serde_json::Value,
+    ) -> anyhow::Result<serde_json::Value>;
 }
 
 /// Generates transparent implementation of selected function, which
@@ -188,6 +200,15 @@ macro_rules! transparent_impl {
     (on_proposal_rejected) => {
         fn on_proposal_rejected(&mut self, _proposal_id: &str) -> anyhow::Result<()> {
             Ok(())
+        }
+    };
+    (control_event) => {
+        fn control_event(
+            &mut self,
+            component: &str,
+            params: serde_json::Value,
+        ) -> anyhow::Result<serde_json::Value> {
+            Ok(serde_json::Value::Null)
         }
     };
 }

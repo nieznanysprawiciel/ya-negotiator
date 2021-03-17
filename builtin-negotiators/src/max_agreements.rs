@@ -90,4 +90,5 @@ impl NegotiatorComponent for MaxAgreements {
     transparent_impl!(fill_template);
     transparent_impl!(on_proposal_rejected);
     transparent_impl!(on_post_terminate_event);
+    transparent_impl!(control_event);
 }

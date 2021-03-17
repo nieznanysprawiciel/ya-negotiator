@@ -55,6 +55,7 @@ impl NegotiatorComponent for FilterNodes {
     transparent_impl!(fill_template);
     transparent_impl!(on_agreement_terminated);
     transparent_impl!(on_agreement_approved);
+    transparent_impl!(control_event);
 }
 
 register_negotiators!(FilterNodes);

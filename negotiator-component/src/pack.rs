@@ -1,9 +1,12 @@
 use anyhow::anyhow;
+use serde_json::Value;
 use std::collections::HashMap;
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 
-use crate::component::{AgreementResult, NegotiationResult, NegotiatorComponent, Score};
+use crate::component::{
+    AgreementResult, NegotiationResult, NegotiatorComponent, PostTerminateEvent, Score,
+};
 
 pub struct NegotiatorsPack {
     components: HashMap<String, Box<dyn NegotiatorComponent>>,
@@ -130,5 +133,54 @@ impl NegotiatorComponent for NegotiatorsPack {
                 .ok();
         }
         Ok(())
+    }
+
+    fn on_proposal_rejected(&mut self, proposal_id: &str) -> anyhow::Result<()> {
+        for (name, component) in &mut self.components {
+            component
+                .on_proposal_rejected(proposal_id)
+                .map_err(|e| {
+                    log::warn!(
+                        "Negotiator component '{}' failed handling Proposal [{}] rejection. {}",
+                        name,
+                        proposal_id,
+                        e
+                    )
+                })
+                .ok();
+        }
+        Ok(())
+    }
+
+    fn on_post_terminate_event(
+        &mut self,
+        agreement_id: &str,
+        event: &PostTerminateEvent,
+    ) -> anyhow::Result<()> {
+        for (name, component) in &mut self.components {
+            component
+                .on_post_terminate_event(agreement_id, event)
+                .map_err(|e| {
+                    log::warn!(
+                        "Negotiator component '{}' failed handling post Terminate event [{}]. {}",
+                        name,
+                        agreement_id,
+                        e
+                    )
+                })
+                .ok();
+        }
+        Ok(())
+    }
+
+    fn control_event(
+        &mut self,
+        component: &str,
+        params: Value,
+    ) -> anyhow::Result<serde_json::Value> {
+        match self.components.get_mut(component) {
+            None => Ok(serde_json::Value::Null),
+            Some(negotiator) => negotiator.control_event(component, params),
+        }
     }
 }

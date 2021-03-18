@@ -10,11 +10,13 @@ use crate::node::{Node, NodeType};
 use crate::provider::{provider_agreements_processor, provider_proposals_processor};
 use crate::requestor::{requestor_agreements_processor, requestor_proposals_processor};
 
+use crate::prepare_test_dir;
 use anyhow::anyhow;
 use futures::future::select_all;
 use futures::{Future, FutureExt};
 use std::collections::HashMap;
 use std::fmt;
+use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::task::JoinHandle;
@@ -32,21 +34,25 @@ pub struct FrameworkError {
 pub struct Framework {
     pub requestors: HashMap<NodeId, Arc<Node>>,
     pub providers: HashMap<NodeId, Arc<Node>>,
+
+    pub test_dir: PathBuf,
 }
 
 impl Framework {
-    pub fn new_empty() -> anyhow::Result<Framework> {
+    pub fn new_empty(test_name: &str) -> anyhow::Result<Framework> {
         Ok(Framework {
             requestors: HashMap::new(),
             providers: HashMap::new(),
+            test_dir: prepare_test_dir(test_name)?,
         })
     }
 
     pub fn new(
+        test_name: &str,
         prov_config: NegotiatorsConfig,
         req_config: NegotiatorsConfig,
     ) -> anyhow::Result<Framework> {
-        let framework = Self::new_empty()?
+        let framework = Self::new_empty(test_name)?
             .add_provider(prov_config)?
             .add_requestor(req_config)?;
 
@@ -54,13 +60,43 @@ impl Framework {
     }
 
     pub fn add_provider(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
-        let node = Node::new(config, NodeType::Provider)?;
+        let node = Node::new(config, NodeType::Provider, None, self.test_dir.clone())?;
         self.providers.insert(node.node_id, node);
         Ok(self)
     }
 
     pub fn add_requestor(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
-        let node = Node::new(config, NodeType::Requestor)?;
+        let node = Node::new(config, NodeType::Requestor, None, self.test_dir.clone())?;
+        self.requestors.insert(node.node_id, node);
+        Ok(self)
+    }
+
+    pub fn add_named_provider(
+        mut self,
+        config: NegotiatorsConfig,
+        name: &str,
+    ) -> anyhow::Result<Self> {
+        let node = Node::new(
+            config,
+            NodeType::Provider,
+            Some(name.to_string()),
+            self.test_dir.clone(),
+        )?;
+        self.providers.insert(node.node_id, node);
+        Ok(self)
+    }
+
+    pub fn add_named_requestor(
+        mut self,
+        config: NegotiatorsConfig,
+        name: &str,
+    ) -> anyhow::Result<Self> {
+        let node = Node::new(
+            config,
+            NodeType::Requestor,
+            Some(name.to_string()),
+            self.test_dir.clone(),
+        )?;
         self.requestors.insert(node.node_id, node);
         Ok(self)
     }

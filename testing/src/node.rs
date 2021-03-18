@@ -5,6 +5,7 @@ use rand::{thread_rng, Rng};
 use std::sync::Arc;
 use tokio::sync::broadcast;
 
+use std::path::PathBuf;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_client_model::market::agreement::State as AgreementState;
 use ya_client_model::market::proposal::State;
@@ -24,15 +25,24 @@ pub struct Node {
     pub negotiator: Arc<NegotiatorAddr>,
     pub node_id: NodeId,
     pub node_type: NodeType,
+    pub name: String,
 
     pub agreement_sender: broadcast::Sender<AgreementAction>,
     pub proposal_sender: broadcast::Sender<ProposalAction>,
 }
 
 impl Node {
-    pub fn new(config: NegotiatorsConfig, node_type: NodeType) -> anyhow::Result<Arc<Node>> {
-        let (negotiator, callbacks) = create_negotiator(config)?;
+    pub fn new(
+        config: NegotiatorsConfig,
+        node_type: NodeType,
+        name: Option<String>,
+        working_dir: PathBuf,
+    ) -> anyhow::Result<Arc<Node>> {
         let node_id = generate_identity();
+        let name = name.unwrap_or(node_id.to_string());
+        let working_dir = working_dir.join(&name);
+
+        let (negotiator, callbacks) = create_negotiator(config, working_dir)?;
 
         let (agreement_sender, _) = broadcast::channel(16);
         let (proposal_sender, _) = broadcast::channel(16);
@@ -43,6 +53,7 @@ impl Node {
             node_type,
             proposal_sender: proposal_sender.clone(),
             agreement_sender: agreement_sender.clone(),
+            name,
         };
 
         let NegotiatorCallbacks {

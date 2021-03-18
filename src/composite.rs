@@ -7,7 +7,10 @@ use tokio::sync::mpsc;
 use ya_client_model::market::{NewOffer, NewProposal, Reason};
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
-use crate::negotiators::{AgreementAction, AgreementSigned, ProposalAction};
+use crate::negotiators::{
+    AgreementAction, AgreementSigned, ControlEvent, PostAgreementEvent, ProposalAction,
+    ProposalRejected,
+};
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::NegotiatorsPack;
 
@@ -26,7 +29,7 @@ use ya_agreement_utils::{AgreementView, OfferTemplate};
 ///   This mean we should implement plugin-like system to communicate with external applications/code.
 /// - Multiple negotiating plugins cooperating with each other. Note that introducing new features to
 ///   Agreement specification requires implementing separate negotiation logic. In this case we
-///   can end up with explosion of combination to implement. What worse, we will force external
+///   can end up with explosion of combinations to implement. What worse, we will force external
 ///   developers to adjust their logic to new Agreement features each time, when they appear.
 ///   To avoid this we should design internal interfaces, which will allow to combine multiple logics
 ///   as plugable components.
@@ -215,6 +218,32 @@ impl Handler<AgreementFinalized> for Negotiator {
     fn handle(&mut self, msg: AgreementFinalized, _: &mut Context<Self>) -> Self::Result {
         self.components
             .on_agreement_terminated(&msg.agreement_id, &msg.result)
+    }
+}
+
+impl Handler<ProposalRejected> for Negotiator {
+    type Result = anyhow::Result<()>;
+
+    fn handle(&mut self, msg: ProposalRejected, _: &mut Context<Self>) -> Self::Result {
+        // TODO: Pass reason to components.
+        self.components.on_proposal_rejected(&msg.proposal_id)
+    }
+}
+
+impl Handler<PostAgreementEvent> for Negotiator {
+    type Result = anyhow::Result<()>;
+
+    fn handle(&mut self, msg: PostAgreementEvent, _: &mut Context<Self>) -> Self::Result {
+        self.components
+            .on_post_terminate_event(&msg.agreement_id, &msg.event)
+    }
+}
+
+impl Handler<ControlEvent> for Negotiator {
+    type Result = anyhow::Result<serde_json::Value>;
+
+    fn handle(&mut self, msg: ControlEvent, _: &mut Context<Self>) -> Self::Result {
+        self.components.control_event(&msg.component, msg.params)
     }
 }
 

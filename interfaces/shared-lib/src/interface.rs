@@ -32,7 +32,9 @@ pub struct NegotiatorLib {
     */
     #[sabi(last_prefix_field)]
     /// Create negotiator. First parameter is name. Second parameter is negotiator config.
-    pub create_negotiator: extern "C" fn(RStr, RStr) -> RResult<BoxedSharedNegotiatorAPI, RString>,
+    /// Third parameter is path which component can use to store it's data.
+    pub create_negotiator:
+        extern "C" fn(RStr, RStr, RStr) -> RResult<BoxedSharedNegotiatorAPI, RString>,
 }
 
 /// The RootModule trait defines how to load the root module of a library.
@@ -85,6 +87,16 @@ pub trait SharedNegotiatorAPI {
     /// Called when Negotiator decided to approve/propose Agreement. It's only notification,
     /// `NegotiatorComponent` can't reject Agreement anymore.
     fn on_agreement_approved(&mut self, agreement: &RStr) -> RResult<(), RString>;
+
+    fn on_proposal_rejected(&mut self, proposal_id: &RStr) -> RResult<(), RString>;
+
+    fn on_post_terminate_event(
+        &mut self,
+        agreement_id: &RStr,
+        event: &RStr,
+    ) -> RResult<(), RString>;
+
+    fn control_event(&mut self, component: &RStr, params: &RStr) -> RResult<RString, RString>;
 }
 
 pub type BoxedSharedNegotiatorAPI = SharedNegotiatorAPI_TO<'static, RBox<()>>;

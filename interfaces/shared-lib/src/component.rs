@@ -1,11 +1,13 @@
 use abi_stable::std_types::RStr;
-use std::path::Path;
+use anyhow::anyhow;
+use std::path::{Path, PathBuf};
 
 use crate::interface::{load_library, BoxedSharedNegotiatorAPI};
 
+use serde_json::Value;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
+    AgreementResult, NegotiationResult, NegotiatorComponent, PostTerminateEvent, Score,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -30,16 +32,28 @@ impl SharedLibNegotiator {
         path: &Path,
         negotiator_name: &str,
         config: serde_yaml::Value,
+        working_dir: PathBuf,
     ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
         let config = serde_yaml::to_string(&config).map_err(SharedLibError::from)?;
+        let working_dir = working_dir
+            .to_path_buf()
+            .to_str()
+            .ok_or(anyhow!(
+                "Failed to convert path: {} to string.",
+                working_dir.display()
+            ))?
+            .to_string();
 
         let library = load_library(path)?;
-        let negotiator =
-            library.create_negotiator()(RStr::from_str(negotiator_name), RStr::from_str(&config))
-                .into_result()
-                .map_err(|e| {
-                    SharedLibError::Initialization(negotiator_name.to_string(), e.into_string())
-                })?;
+        let negotiator = library.create_negotiator()(
+            RStr::from_str(negotiator_name),
+            RStr::from_str(&config),
+            RStr::from_str(&working_dir),
+        )
+        .into_result()
+        .map_err(|e| {
+            SharedLibError::Initialization(negotiator_name.to_string(), e.into_string())
+        })?;
 
         Ok(Box::new(SharedLibNegotiator { negotiator }))
     }
@@ -104,5 +118,41 @@ impl NegotiatorComponent for SharedLibNegotiator {
             .on_agreement_approved(&RStr::from_str(&agreement))
             .into_result()
             .map_err(|e| SharedLibError::Negotiation(e.into_string()))?)
+    }
+
+    fn on_proposal_rejected(&mut self, proposal_id: &str) -> anyhow::Result<()> {
+        Ok(self
+            .negotiator
+            .on_proposal_rejected(&RStr::from_str(&proposal_id))
+            .into_result()
+            .map_err(|e| SharedLibError::Negotiation(e.into_string()))?)
+    }
+
+    fn on_post_terminate_event(
+        &mut self,
+        agreement_id: &str,
+        event: &PostTerminateEvent,
+    ) -> anyhow::Result<()> {
+        let event = serde_json::to_string(&event).map_err(SharedLibError::from)?;
+        Ok(self
+            .negotiator
+            .on_post_terminate_event(&RStr::from_str(&agreement_id), &RStr::from_str(&event))
+            .into_result()
+            .map_err(|e| SharedLibError::Negotiation(e.into_string()))?)
+    }
+
+    fn control_event(
+        &mut self,
+        component: &str,
+        params: Value,
+    ) -> anyhow::Result<serde_json::Value> {
+        let params = serde_json::to_string(&params).map_err(SharedLibError::from)?;
+        let result = self
+            .negotiator
+            .control_event(&RStr::from_str(&component), &RStr::from_str(&params))
+            .into_result()
+            .map_err(|e| SharedLibError::Negotiation(e.into_string()))?;
+
+        Ok(serde_json::from_str(result.as_str()).map_err(SharedLibError::from)?)
     }
 }

@@ -3,19 +3,22 @@ use abi_stable::sabi_trait::TU_Opaque;
 use abi_stable::std_types::{RResult, RResult::RErr, RResult::ROk, RStr, RString};
 use lazy_static::lazy_static;
 use std::collections::HashMap;
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::interface::{BoxedSharedNegotiatorAPI, SharedNegotiatorAPI};
 use crate::SharedLibError;
 
+use std::str::FromStr;
 pub use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
+pub use ya_negotiator_component::transparent_impl;
 
 pub trait NegotiatorConstructor<T: NegotiatorComponent + Sync + Send + Sized>: Sync + Send {
-    fn new(name: &str, config: serde_yaml::Value) -> anyhow::Result<T>;
+    fn new(name: &str, config: serde_yaml::Value, working_dir: PathBuf) -> anyhow::Result<T>;
 }
 
 /// Wraps `NegotiatorComponent` inside shared library and translates communication
@@ -30,16 +33,25 @@ impl<T> NegotiatorWrapper<T>
 where
     T: NegotiatorComponent + NegotiatorConstructor<T> + Sized + 'static,
 {
-    pub fn new(name: RStr, config: RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> {
-        match Self::new_impl(name, config) {
+    pub fn new(
+        name: RStr,
+        config: RStr,
+        working_dir: RStr,
+    ) -> RResult<BoxedSharedNegotiatorAPI, RString> {
+        match Self::new_impl(name, config, working_dir) {
             Ok(nagotiator) => ROk(nagotiator),
             Err(e) => RErr(RString::from(e.to_string())),
         }
     }
 
-    fn new_impl(name: RStr, config: RStr) -> anyhow::Result<BoxedSharedNegotiatorAPI> {
+    fn new_impl(
+        name: RStr,
+        config: RStr,
+        working_dir: RStr,
+    ) -> anyhow::Result<BoxedSharedNegotiatorAPI> {
+        let working_dir = PathBuf::from_str(working_dir.as_str())?;
         let config = serde_yaml::from_str(config.as_str())?;
-        let component = T::new(name.as_str(), config)?;
+        let component = T::new(name.as_str(), config, working_dir)?;
 
         Ok(BoxedSharedNegotiatorAPI::from_value(
             NegotiatorWrapper { component },
@@ -135,10 +147,56 @@ where
             Err(e) => RResult::RErr(RString::from(e.to_string())),
         }
     }
+
+    fn on_proposal_rejected(&mut self, proposal_id: &RStr) -> RResult<(), RString> {
+        match (|| {
+            self.component
+                .on_proposal_rejected(proposal_id.as_str())
+                .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
+            Result::<(), SharedLibError>::Ok(())
+        })() {
+            Ok(_) => ROk(()),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+
+    fn on_post_terminate_event(
+        &mut self,
+        agreement_id: &RStr,
+        event: &RStr,
+    ) -> RResult<(), RString> {
+        match (|| {
+            let result = serde_json::from_str(event.as_str()).map_err(SharedLibError::from)?;
+            self.component
+                .on_post_terminate_event(agreement_id.as_str(), &result)
+                .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
+            Result::<(), SharedLibError>::Ok(())
+        })() {
+            Ok(_) => ROk(()),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
+
+    fn control_event(&mut self, component: &RStr, params: &RStr) -> RResult<RString, RString> {
+        match (|| {
+            let params = serde_json::from_str(params.as_str()).map_err(SharedLibError::from)?;
+            let response = self
+                .component
+                .control_event(component.as_str(), params)
+                .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
+
+            Result::<String, SharedLibError>::Ok(
+                serde_json::to_string(&response).map_err(SharedLibError::from)?,
+            )
+        })() {
+            Ok(response) => ROk(RString::from(response)),
+            Err(e) => RResult::RErr(RString::from(e.to_string())),
+        }
+    }
 }
 
 type ConstructorFunction =
-    Box<dyn Fn(RStr, RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> + Send + Sync>;
+    Box<dyn Fn(RStr, RStr, RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> + Send + Sync>;
 
 lazy_static! {
     /// Contains functions that can create negotiators by name.
@@ -154,14 +212,18 @@ pub fn register_negotiator_impl(
 }
 
 #[sabi_extern_fn]
-pub fn create_negotiator(name: RStr, config: RStr) -> RResult<BoxedSharedNegotiatorAPI, RString> {
+pub fn create_negotiator(
+    name: RStr,
+    config: RStr,
+    working_dir: RStr,
+) -> RResult<BoxedSharedNegotiatorAPI, RString> {
     let map = match (*CONSTRUCTORS).lock() {
         Ok(map) => map,
         Err(e) => return RErr(RString::from(e.to_string())),
     };
 
     match map.get(name.as_str()) {
-        Some(constructor) => constructor(name, config),
+        Some(constructor) => constructor(name, config, working_dir),
         None => RErr(RString::from(format!("Negotiator '{}' not found.", name))),
     }
 }
@@ -169,8 +231,8 @@ pub fn create_negotiator(name: RStr, config: RStr) -> RResult<BoxedSharedNegotia
 #[macro_export]
 macro_rules! register_negotiators_inner {
     ($NegotiatorType:ty) => {{
-        ya_negotiator_shared_lib_interface::plugin::register_negotiator_impl(stringify!($NegotiatorType), Box::new(|name, config| {
-            ya_negotiator_shared_lib_interface::plugin::NegotiatorWrapper::<$NegotiatorType>::new(name, config)
+        ya_negotiator_shared_lib_interface::plugin::register_negotiator_impl(stringify!($NegotiatorType), Box::new(|name, config, working_dir| {
+            ya_negotiator_shared_lib_interface::plugin::NegotiatorWrapper::<$NegotiatorType>::new(name, config, working_dir)
         })).unwrap();
     }};
     ($NegotiatorType:ty, $($Rest:ty),+) => {

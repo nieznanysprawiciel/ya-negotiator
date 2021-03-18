@@ -59,7 +59,12 @@ fn example_demand(deadline: DateTime<Utc>) -> OfferTemplate {
 
 #[actix_rt::test]
 async fn test_requestor_provider_flow() {
-    let framework = Framework::new(example_config(), req_example_config()).unwrap();
+    let framework = Framework::new(
+        "test_requestor_provider_flow",
+        example_config(),
+        req_example_config(),
+    )
+    .unwrap();
     let record = framework
         .run_for_templates(
             example_demand(Utc::now() + chrono::Duration::seconds(150)),

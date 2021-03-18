@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use ya_negotiator_shared_lib_interface::plugin::{
     transparent_impl, NegotiationResult, NegotiatorComponent, NegotiatorConstructor, ProposalView,
@@ -16,7 +17,11 @@ pub struct FilterNodesConfig {
 }
 
 impl NegotiatorConstructor<FilterNodes> for FilterNodes {
-    fn new(_name: &str, config: serde_yaml::Value) -> anyhow::Result<FilterNodes> {
+    fn new(
+        _name: &str,
+        config: serde_yaml::Value,
+        _working_dir: PathBuf,
+    ) -> anyhow::Result<FilterNodes> {
         let config: FilterNodesConfig = serde_yaml::from_value(config)?;
         Ok(FilterNodes {
             names: config.names,

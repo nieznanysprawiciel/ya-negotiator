@@ -8,6 +8,7 @@ use ya_negotiators::{NegotiatorCallbacks, ProposalAction};
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::NewDemand;
 use ya_client_model::market::Proposal;
+use ya_negotiators_testing::prepare_test_dir;
 
 fn example_config() -> NegotiatorsConfig {
     let expiration_conf = NegotiatorConfig {
@@ -80,7 +81,7 @@ async fn test_negotiation() {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config).unwrap();
+    ) = create_negotiator(config, prepare_test_dir("test_negotiation").unwrap()).unwrap();
 
     let offer = negotiator.create_offer(&example_offer()).await.unwrap();
     let offer = proposal_from_demand(&offer);

@@ -8,6 +8,7 @@ use ya_negotiators::{NegotiatorCallbacks, ProposalAction};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewDemand, Proposal};
+use ya_negotiators_testing::prepare_test_dir;
 
 #[derive(Serialize, Deserialize)]
 pub struct FilterNodesConfig {
@@ -93,7 +94,7 @@ async fn test_shared_library() {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config).unwrap();
+    ) = create_negotiator(config, prepare_test_dir("test_shared_library").unwrap()).unwrap();
 
     let offer = negotiator
         .create_offer(&example_offer_definition())

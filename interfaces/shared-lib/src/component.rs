@@ -1,5 +1,6 @@
 use abi_stable::std_types::RStr;
-use std::path::Path;
+use anyhow::anyhow;
+use std::path::{Path, PathBuf};
 
 use crate::interface::{load_library, BoxedSharedNegotiatorAPI};
 
@@ -31,16 +32,28 @@ impl SharedLibNegotiator {
         path: &Path,
         negotiator_name: &str,
         config: serde_yaml::Value,
+        working_dir: PathBuf,
     ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
         let config = serde_yaml::to_string(&config).map_err(SharedLibError::from)?;
+        let working_dir = working_dir
+            .to_path_buf()
+            .to_str()
+            .ok_or(anyhow!(
+                "Failed to convert path: {} to string.",
+                working_dir.display()
+            ))?
+            .to_string();
 
         let library = load_library(path)?;
-        let negotiator =
-            library.create_negotiator()(RStr::from_str(negotiator_name), RStr::from_str(&config))
-                .into_result()
-                .map_err(|e| {
-                    SharedLibError::Initialization(negotiator_name.to_string(), e.into_string())
-                })?;
+        let negotiator = library.create_negotiator()(
+            RStr::from_str(negotiator_name),
+            RStr::from_str(&config),
+            RStr::from_str(&working_dir),
+        )
+        .into_result()
+        .map_err(|e| {
+            SharedLibError::Initialization(negotiator_name.to_string(), e.into_string())
+        })?;
 
         Ok(Box::new(SharedLibNegotiator { negotiator }))
     }

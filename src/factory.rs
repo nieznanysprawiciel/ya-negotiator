@@ -38,16 +38,23 @@ pub struct NegotiatorsConfig {
 
 pub fn create_negotiator(
     config: NegotiatorsConfig,
+    working_dir: PathBuf,
 ) -> anyhow::Result<(Arc<NegotiatorAddr>, NegotiatorCallbacks)> {
     let mut components = NegotiatorsPack::new();
     for config in config.negotiators.into_iter() {
         let name = config.name;
+        let working_dir = working_dir.join(&name);
+
         let negotiator = match config.load_mode {
-            LoadMode::BuiltIn => create_builtin(&name, config.params)?,
-            LoadMode::SharedLibrary { path } => create_shared_lib(&path, &name, config.params)?,
-            LoadMode::StaticLib { library } => {
-                create_static_negotiator(&format!("{}::{}", &library, &name), config.params)?
+            LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,
+            LoadMode::SharedLibrary { path } => {
+                create_shared_lib(&path, &name, config.params, working_dir)?
             }
+            LoadMode::StaticLib { library } => create_static_negotiator(
+                &format!("{}::{}", &library, &name),
+                config.params,
+                working_dir,
+            )?,
         };
 
         components = components.add_component(&name, negotiator);
@@ -60,6 +67,7 @@ pub fn create_negotiator(
 pub fn create_builtin(
     name: &str,
     config: serde_yaml::Value,
+    _working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
     let negotiator = match &name[..] {
         "LimitAgreements" => Box::new(MaxAgreements::new(config)?) as Box<dyn NegotiatorComponent>,
@@ -76,8 +84,9 @@ pub fn create_shared_lib(
     path: &Path,
     name: &str,
     config: serde_yaml::Value,
+    working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
-    SharedLibNegotiator::new(path, name, config)
+    SharedLibNegotiator::new(path, name, config, working_dir)
 }
 
 #[cfg(test)]
@@ -110,6 +119,6 @@ mod tests {
         let serialized = serde_yaml::to_string(&config).unwrap();
         println!("{}", serialized);
 
-        create_negotiator(serde_yaml::from_str(&serialized).unwrap()).unwrap();
+        create_negotiator(serde_yaml::from_str(&serialized).unwrap(), PathBuf::new()).unwrap();
     }
 }

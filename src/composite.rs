@@ -2,6 +2,7 @@ use actix::{Actor, Context, Handler};
 use anyhow::anyhow;
 use serde_json::Value;
 use std::convert::TryFrom;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
 use ya_client_model::market::{NewOffer, NewProposal, Reason};
@@ -12,10 +13,18 @@ use crate::negotiators::{
     ProposalRejected,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
-use crate::NegotiatorsPack;
+use crate::{NegotiatorsPack, ProposalsCollection};
 
+use crate::collection::ProposalScore;
 use ya_agreement_utils::agreement::{expand, flatten};
 use ya_agreement_utils::{AgreementView, OfferTemplate};
+
+struct NegotiatorConfig {
+    /// Time period before making decision, which Proposals to choose.
+    pub collect_proposals_period: Duration,
+    /// Time period before making decision, which Agreements to choose.
+    pub collect_agreements_period: Duration,
+}
 
 /// Actor implementing Negotiation logic.
 ///
@@ -38,6 +47,8 @@ pub struct Negotiator {
 
     proposal_channel: mpsc::UnboundedSender<ProposalAction>,
     agreement_channel: mpsc::UnboundedSender<AgreementAction>,
+
+    proposals: ProposalsCollection,
 }
 
 pub struct NegotiatorCallbacks {
@@ -52,8 +63,9 @@ impl Negotiator {
 
         let negotiator = Negotiator {
             components,
-            proposal_channel: proposal_sender,
+            proposal_channel: proposal_sender.clone(),
             agreement_channel: agreement_sender,
+            proposals: ProposalsCollection::new(proposal_sender),
         };
 
         let callbacks = NegotiatorCallbacks {
@@ -101,10 +113,18 @@ impl Handler<ReactToProposal> for Negotiator {
                     reason,
                 })?;
             }
-            NegotiationResult::Ready { .. } => {
-                self.proposal_channel.send(ProposalAction::AcceptProposal {
-                    id: proposal.id.clone(),
+            NegotiationResult::Ready {
+                proposal: our_proposal,
+                score,
+            } => {
+                self.proposals.new_scored(ProposalScore {
+                    proposal: our_proposal,
+                    prev: proposal,
+                    score: score.pointer_typed("/final-score").unwrap_or(0.0),
                 })?;
+                // self.proposal_channel.send(ProposalAction::AcceptProposal {
+                //     id: proposal.id.clone(),
+                // })?;
             }
             NegotiationResult::Negotiating {
                 proposal: template, ..

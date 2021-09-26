@@ -14,7 +14,7 @@ use ya_negotiator_component::component::PostTerminateEvent;
 /// Response for requestor proposals.
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[allow(dead_code)]
-pub enum ProposalAction {
+pub enum Action {
     #[display(fmt = "CounterProposal")]
     CounterProposal { id: String, proposal: NewProposal },
     #[display(fmt = "AcceptProposal")]
@@ -220,11 +220,11 @@ mod tests {
 
     #[test]
     fn test_proposal_response_display() {
-        let reason = ProposalAction::RejectProposal {
+        let reason = Action::RejectProposal {
             id: "".to_string(),
             reason: Some("zima".into()),
         };
-        let no_reason = ProposalAction::RejectProposal {
+        let no_reason = Action::RejectProposal {
             id: "".to_string(),
             reason: None,
         };

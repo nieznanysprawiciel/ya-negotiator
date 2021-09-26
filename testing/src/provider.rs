@@ -1,4 +1,4 @@
-use ya_negotiators::{AgreementAction, AgreementResult, ProposalAction};
+use ya_negotiators::{Action, AgreementAction, AgreementResult};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewProposal, Reason};
@@ -176,11 +176,11 @@ pub async fn provider_proposals_processor(
 
     while let Some((node_id, Ok(action))) = p_receivers.next().await {
         match action {
-            ProposalAction::AcceptProposal { id } => reactions.accept_proposal(node_id, id).await,
-            ProposalAction::CounterProposal { id, proposal } => {
+            Action::AcceptProposal { id } => reactions.accept_proposal(node_id, id).await,
+            Action::CounterProposal { id, proposal } => {
                 reactions.counter_proposal(node_id, id, proposal).await
             }
-            ProposalAction::RejectProposal { id, reason } => {
+            Action::RejectProposal { id, reason } => {
                 reactions.reject_proposal(node_id, id, reason).await
             }
         }

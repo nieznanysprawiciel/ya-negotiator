@@ -1,4 +1,4 @@
-use actix::{Actor, Context, Handler};
+use actix::{Actor, Context, Handler, StreamHandler};
 use anyhow::anyhow;
 use serde_json::Value;
 use std::convert::TryFrom;
@@ -9,13 +9,12 @@ use ya_client_model::market::{NewOffer, NewProposal, Reason};
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
 use crate::negotiators::{
-    AgreementAction, AgreementSigned, ControlEvent, PostAgreementEvent, ProposalAction,
-    ProposalRejected,
+    Action, AgreementAction, AgreementSigned, ControlEvent, PostAgreementEvent, ProposalRejected,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::{NegotiatorsPack, ProposalsCollection};
 
-use crate::collection::ProposalScore;
+use crate::collection::{Feedback, ProposalScore};
 use ya_agreement_utils::agreement::{expand, flatten};
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
@@ -45,14 +44,14 @@ struct NegotiatorConfig {
 pub struct Negotiator {
     components: NegotiatorsPack,
 
-    proposal_channel: mpsc::UnboundedSender<ProposalAction>,
+    proposal_channel: mpsc::UnboundedSender<Action>,
     agreement_channel: mpsc::UnboundedSender<AgreementAction>,
 
     proposals: ProposalsCollection,
 }
 
 pub struct NegotiatorCallbacks {
-    pub proposal_channel: mpsc::UnboundedReceiver<ProposalAction>,
+    pub proposal_channel: mpsc::UnboundedReceiver<Action>,
     pub agreement_channel: mpsc::UnboundedReceiver<AgreementAction>,
 }
 
@@ -65,7 +64,7 @@ impl Negotiator {
             components,
             proposal_channel: proposal_sender.clone(),
             agreement_channel: agreement_sender,
-            proposals: ProposalsCollection::new(proposal_sender),
+            proposals: ProposalsCollection::new(),
         };
 
         let callbacks = NegotiatorCallbacks {
@@ -106,9 +105,10 @@ impl Handler<ReactToProposal> for Negotiator {
         let result = self
             .components
             .negotiate_step(&proposal, template, Score::default())?;
+
         match result {
             NegotiationResult::Reject { reason } => {
-                self.proposal_channel.send(ProposalAction::RejectProposal {
+                self.proposal_channel.send(Action::RejectProposal {
                     id: proposal.id.clone(),
                     reason,
                 })?;
@@ -122,9 +122,6 @@ impl Handler<ReactToProposal> for Negotiator {
                     prev: proposal,
                     score: score.pointer_typed("/final-score").unwrap_or(0.0),
                 })?;
-                // self.proposal_channel.send(ProposalAction::AcceptProposal {
-                //     id: proposal.id.clone(),
-                // })?;
             }
             NegotiationResult::Negotiating {
                 proposal: template, ..
@@ -133,11 +130,10 @@ impl Handler<ReactToProposal> for Negotiator {
                     properties: serde_json::Value::Object(flatten(template.content.properties)),
                     constraints: template.content.constraints,
                 };
-                self.proposal_channel
-                    .send(ProposalAction::CounterProposal {
-                        id: proposal.id.clone(),
-                        proposal: offer,
-                    })?;
+                self.proposal_channel.send(Action::CounterProposal {
+                    id: proposal.id.clone(),
+                    proposal: offer,
+                })?;
             }
         }
         Ok(())
@@ -267,6 +263,34 @@ impl Handler<ControlEvent> for Negotiator {
     }
 }
 
+impl StreamHandler<Feedback> for Negotiator {
+    fn handle(&mut self, item: Feedback, _ctx: &mut Context<Self>) {
+        match item {
+            Feedback::Decide => self.proposals.decide(),
+            Feedback::Accept { id } => self
+                .proposal_channel
+                .send(Action::AcceptProposal { id: id.clone() })
+                .map_err(|_| anyhow!("Failed to send AcceptProposal for {}", id)),
+            Feedback::Reject { id, reason, .. } => self
+                .proposal_channel
+                .send(Action::RejectProposal {
+                    id: id.clone(),
+                    reason,
+                })
+                .map_err(|_| anyhow!("Failed to send RejectProposal for {}", id)),
+        };
+    }
+}
+
 impl Actor for Negotiator {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        let channel = self
+            .proposals
+            .feedback_receiver
+            .take()
+            .expect("ProposalsCollection has stolen Receiver on initialization.");
+        Self::add_stream(channel, ctx);
+    }
 }

@@ -1,5 +1,5 @@
 use ya_agreement_utils::AgreementView;
-use ya_negotiators::{AgreementAction, ProposalAction};
+use ya_negotiators::{Action, AgreementAction};
 
 use ya_client_model::market::{NewProposal, Proposal, Reason};
 use ya_client_model::NodeId;
@@ -19,7 +19,7 @@ use std::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NegotiationStage {
-    Proposal(ProposalAction),
+    Proposal(Action),
     Agreement(AgreementAction),
     Error(String),
     InfiniteLoop,
@@ -98,7 +98,7 @@ impl NegotiationRecordSync {
 
         negotiation
             .stage
-            .push(NegotiationStage::Proposal(ProposalAction::AcceptProposal {
+            .push(NegotiationStage::Proposal(Action::AcceptProposal {
                 id: counter_proposal.clone().prev_proposal_id.unwrap(),
             }));
 
@@ -122,15 +122,15 @@ impl NegotiationRecordSync {
             .entry(NodePair(counter_proposal.issuer_id, with_node))
             .or_insert(NegotiationResult::new());
 
-        negotiation.stage.push(NegotiationStage::Proposal(
-            ProposalAction::CounterProposal {
+        negotiation
+            .stage
+            .push(NegotiationStage::Proposal(Action::CounterProposal {
                 id: counter_proposal.clone().prev_proposal_id.unwrap(),
                 proposal: NewProposal {
                     properties: counter_proposal.properties.clone(),
                     constraints: counter_proposal.constraints.clone(),
                 },
-            },
-        ));
+            }));
 
         negotiation.proposals.push(counter_proposal.clone());
 
@@ -152,7 +152,7 @@ impl NegotiationRecordSync {
 
         negotiation
             .stage
-            .push(NegotiationStage::Proposal(ProposalAction::RejectProposal {
+            .push(NegotiationStage::Proposal(Action::RejectProposal {
                 id: rejected_proposal.prev_proposal_id.unwrap(),
                 reason,
             }));
@@ -256,7 +256,7 @@ impl NegotiationResult {
 
         match self.stage.last() {
             Some(stage) => match stage {
-                NegotiationStage::Proposal(ProposalAction::RejectProposal { .. }) => true,
+                NegotiationStage::Proposal(Action::RejectProposal { .. }) => true,
                 NegotiationStage::Agreement(AgreementAction::RejectAgreement { .. }) => true,
                 NegotiationStage::Error(_) => true,
                 NegotiationStage::InfiniteLoop => true,

@@ -89,7 +89,7 @@ async fn test_requestor_provider_flow() {
         .await;
 
     if results.iter().any(|result| result.is_err()) {
-        panic!(results);
+        panic!("{:?}", results);
     }
 
     println!("{}", record);

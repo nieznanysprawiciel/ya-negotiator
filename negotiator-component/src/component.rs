@@ -146,6 +146,7 @@ pub trait NegotiatorComponent {
 /// Generates transparent implementation of selected function, which
 /// does something neutral (Does nothing but in the way that doesn't affect rest
 /// of negotiations).
+/// TODO: We don't need macro, since we can provider default implementation instead.
 #[macro_export]
 macro_rules! transparent_impl {
     (on_post_terminate_event) => {

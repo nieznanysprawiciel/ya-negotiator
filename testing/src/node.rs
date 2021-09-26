@@ -13,7 +13,7 @@ use ya_client_model::market::{Agreement, Demand, DemandOfferBase, Offer, Proposa
 use ya_client_model::NodeId;
 use ya_negotiators::factory::{create_negotiator, NegotiatorsConfig};
 use ya_negotiators::{
-    AgreementAction, AgreementResult, NegotiatorAddr, NegotiatorCallbacks, ProposalAction,
+    Action, AgreementAction, AgreementResult, NegotiatorAddr, NegotiatorCallbacks,
 };
 
 pub enum NodeType {
@@ -28,7 +28,7 @@ pub struct Node {
     pub name: String,
 
     pub agreement_sender: broadcast::Sender<AgreementAction>,
-    pub proposal_sender: broadcast::Sender<ProposalAction>,
+    pub proposal_sender: broadcast::Sender<Action>,
 }
 
 impl Node {
@@ -80,7 +80,7 @@ impl Node {
         self.agreement_sender.subscribe()
     }
 
-    pub fn proposal_channel(&self) -> broadcast::Receiver<ProposalAction> {
+    pub fn proposal_channel(&self) -> broadcast::Receiver<Action> {
         self.proposal_sender.subscribe()
     }
 

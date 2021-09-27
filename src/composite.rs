@@ -14,7 +14,7 @@ use crate::negotiators::{
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::{NegotiatorsPack, ProposalsCollection};
 
-use crate::collection::{Feedback, ProposalScore};
+use crate::collection::{DecideReason, Feedback, ProposalScore};
 use ya_agreement_utils::agreement::{expand, flatten};
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
@@ -266,7 +266,17 @@ impl Handler<ControlEvent> for Negotiator {
 impl StreamHandler<Feedback> for Negotiator {
     fn handle(&mut self, item: Feedback, _ctx: &mut Context<Self>) {
         match item {
-            Feedback::Decide => self.proposals.decide(),
+            Feedback::Decide(reason) => {
+                match reason {
+                    DecideReason::TimeElapsed => {
+                        log::info!("Choosing Proposals, because collect period elapsed.")
+                    }
+                    DecideReason::GoalReached => log::info!(
+                        "Choosing Proposals, because collected expected number of Proposals."
+                    ),
+                };
+                self.proposals.decide()
+            }
             Feedback::Accept { id } => self
                 .proposal_channel
                 .send(Action::AcceptProposal { id: id.clone() })
@@ -278,7 +288,9 @@ impl StreamHandler<Feedback> for Negotiator {
                     reason,
                 })
                 .map_err(|_| anyhow!("Failed to send RejectProposal for {}", id)),
-        };
+        }
+        .map_err(|e| log::warn!("{}", e))
+        .ok();
     }
 }
 

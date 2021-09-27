@@ -1,5 +1,6 @@
 use actix::prelude::*;
 use anyhow::{anyhow, bail};
+use futures::future::{AbortHandle, Abortable};
 use std::cmp::min;
 use std::time::Duration;
 use tokio::sync::mpsc;
@@ -15,10 +16,16 @@ pub struct ProposalScore {
     pub score: f64,
 }
 
+#[derive(Debug)]
+pub enum DecideReason {
+    TimeElapsed,
+    GoalReached,
+}
+
 #[derive(Message, Debug)]
 #[rtype(result = "()")]
 pub enum Feedback {
-    Decide,
+    Decide(DecideReason),
     Accept {
         id: String,
     },
@@ -45,6 +52,8 @@ pub struct ProposalsCollection {
     /// Number of Proposals to collect, after which best of them will be accepted.
     collect_amount: usize,
 
+    collect_timeout_handle: Option<AbortHandle>,
+
     feedback_channel: mpsc::UnboundedSender<Feedback>,
     pub feedback_receiver: Option<mpsc::UnboundedReceiver<Feedback>>,
 }
@@ -52,17 +61,21 @@ pub struct ProposalsCollection {
 impl ProposalsCollection {
     pub fn new() -> ProposalsCollection {
         let (feedback_sender, feedback_receiver) = mpsc::unbounded_channel();
+
         ProposalsCollection {
             awaiting: vec![],
             rejected: vec![],
             goal: 1,
-            collect_period: Default::default(),
+            collect_period: Duration::from_secs(3600),
             collect_amount: 1,
+            collect_timeout_handle: None,
             feedback_channel: feedback_sender,
             feedback_receiver: Some(feedback_receiver),
         }
     }
 
+    /// Collects Proposals, that were already fully negotiated and score
+    /// for them was computed.
     pub fn new_scored(&mut self, new: ProposalScore) -> anyhow::Result<()> {
         if new.score.is_nan() {
             bail!("Proposal [{}] score was set to NaN.", new.proposal.id);
@@ -83,13 +96,16 @@ impl ProposalsCollection {
         // decision immediately without waiting `collect_period`.
         if self.awaiting.len() >= self.collect_amount {
             self.feedback_channel
-                .send(Feedback::Decide)
+                .send(Feedback::Decide(DecideReason::GoalReached))
                 .map_err(|_| anyhow!("Feedback channel closed."))?;
         }
 
         Ok(())
     }
 
+    /// Makes decision, which Proposals should be responded to.
+    /// Rest of the Proposals is rejected and they are all placed in queue
+    /// for future, in case not enough Agreements will be signed.
     pub fn decide(&mut self) -> anyhow::Result<()> {
         let goal = min(self.goal, self.awaiting.len());
 
@@ -97,8 +113,8 @@ impl ProposalsCollection {
         let accepted = self.awaiting.drain(0..goal).collect::<Vec<_>>();
         let rejected = self.awaiting.drain(..).collect::<Vec<_>>();
 
-        // We already have as many Offers as we wanted.
-        self.goal = 0;
+        // Since we will choose some Proposals, we must adjust how many we expect left.
+        self.goal = self.goal - goal;
 
         for proposal in accepted {
             self.feedback_channel
@@ -121,6 +137,11 @@ impl ProposalsCollection {
             // Proposals with invalid score won't be added.
             self.add_rejected(proposal).ok();
         }
+
+        // If decide call was called because of collect period timeout, we must
+        // start waiting for new period. If we just reached expected number of
+        // collected Proposals, we can spawn collect period anyway.
+        self.spawn_collect_period();
         Ok(())
     }
 
@@ -140,5 +161,29 @@ impl ProposalsCollection {
 
         self.rejected.insert(idx, new);
         Ok(())
+    }
+
+    fn spawn_collect_period(&mut self) {
+        // Cancel previous future notifying about collect period.
+        if let Some(handle) = self.collect_timeout_handle.take() {
+            handle.abort();
+            self.collect_timeout_handle = None;
+        }
+
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+
+        let timeout = self.collect_period.clone();
+        let feedback = self.feedback_channel.clone();
+
+        let future = async move {
+            tokio::time::delay_for(timeout).await;
+            feedback
+                .send(Feedback::Decide(DecideReason::TimeElapsed))
+                .ok();
+        };
+
+        tokio::spawn(Abortable::new(future, abort_registration));
+
+        self.collect_timeout_handle = Some(abort_handle);
     }
 }

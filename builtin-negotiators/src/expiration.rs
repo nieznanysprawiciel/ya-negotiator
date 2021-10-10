@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use ya_agreement_utils::ProposalView;
 use ya_client_model::market::Reason;
 use ya_negotiator_component::component::{NegotiationResult, NegotiatorComponent, Score};
-use ya_negotiator_component::transparent_impl;
 
 /// Negotiator that can limit number of running agreements.
 pub struct LimitExpiration {
@@ -72,11 +71,4 @@ impl NegotiatorComponent for LimitExpiration {
         };
         Ok(result)
     }
-
-    transparent_impl!(fill_template);
-    transparent_impl!(on_agreement_terminated);
-    transparent_impl!(on_agreement_approved);
-    transparent_impl!(on_proposal_rejected);
-    transparent_impl!(on_post_terminate_event);
-    transparent_impl!(control_event);
 }

@@ -168,6 +168,48 @@ impl Framework {
         }
     }
 
+    pub async fn continue_run_for_named_requestor(
+        &self,
+        name: &str,
+        template: OfferTemplate,
+        record: &NegotiationRecord,
+    ) -> Result<NegotiationRecord, FrameworkError> {
+        let record = NegotiationRecordSync::from(record);
+        let node = self
+            .requestors
+            .iter()
+            .find(|(_, node)| node.name == name)
+            .map(|(_, node)| node.clone())
+            .ok_or(FrameworkError::from(
+                anyhow!("Requestor {} not found.", name),
+                &record,
+            ))?;
+
+        let offers = record
+            .0
+            .lock()
+            .unwrap()
+            .proposals
+            .iter()
+            .map(|(_, proposal)| proposal)
+            .cloned()
+            .collect();
+        let demands = vec![node
+            .create_offer(&template)
+            .await
+            .map_err(|e| FrameworkError::from(e, &record))?];
+
+        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(10));
+        self.init_for(offers, demands, record.clone()).await;
+
+        processors_handle
+            .await
+            .map_err(|e| FrameworkError::from(e, &record))?;
+
+        let record = record.0.lock().unwrap();
+        Ok(record.clone())
+    }
+
     fn spawn_processors(&self, record: NegotiationRecordSync, run_for: Duration) -> JoinHandle<()> {
         tokio::spawn(
             select_all(vec![

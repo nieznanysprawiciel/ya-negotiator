@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
 use ya_negotiator_shared_lib_interface::plugin::{
-    transparent_impl, NegotiationResult, NegotiatorComponent, NegotiatorConstructor, ProposalView,
-    Reason, Score,
+    NegotiationResult, NegotiatorComponent, NegotiatorConstructor, ProposalView, Reason, Score,
 };
 use ya_negotiator_shared_lib_interface::*;
 
@@ -54,13 +53,6 @@ impl NegotiatorComponent for FilterNodes {
             },
         })
     }
-
-    transparent_impl!(on_proposal_rejected);
-    transparent_impl!(on_post_terminate_event);
-    transparent_impl!(fill_template);
-    transparent_impl!(on_agreement_terminated);
-    transparent_impl!(on_agreement_approved);
-    transparent_impl!(control_event);
 }
 
 register_negotiators!(FilterNodes);

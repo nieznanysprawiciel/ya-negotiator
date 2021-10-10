@@ -136,9 +136,6 @@ impl ProposalsCollection {
         let accepted = self.awaiting.drain(0..goal).collect::<Vec<_>>();
         let rejected = self.awaiting.drain(..).collect::<Vec<_>>();
 
-        // Since we will choose some Proposals, we must adjust how many we expect left.
-        self.goal = self.goal - goal;
-
         log::info!("Decided to accept {} Proposal(s)/Agreement(s).", goal);
 
         for proposal in accepted {

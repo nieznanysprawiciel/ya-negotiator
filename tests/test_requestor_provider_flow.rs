@@ -73,8 +73,6 @@ async fn test_requestor_provider_flow() {
         .await
         .unwrap();
 
-    println!("{}", record);
-
     assert_eq!(framework.providers.len(), 1);
     assert_eq!(framework.requestors.len(), 1);
 
@@ -100,4 +98,48 @@ async fn test_requestor_provider_flow() {
 
     println!("{}", record);
     //assert!(false);
+}
+
+/// Provider should be able to negotiate with new Requestor after previous Agreement is finished.
+#[actix_rt::test]
+async fn test_negotiations_after_agreement_termination() {
+    let framework = Framework::new(
+        "test_negotiations_after_agreement_termination",
+        example_config(),
+        req_example_config(),
+    )
+    .unwrap();
+    let record = framework
+        .run_for_templates(
+            example_demand(Utc::now() + chrono::Duration::seconds(150)),
+            example_offer(),
+        )
+        .await
+        .unwrap();
+
+    // Close all(1) negotiated Agreement.
+    framework
+        .run_finalize_agreements(
+            record
+                .agreements
+                .iter()
+                .map(|(_, agreement)| (agreement, AgreementResult::ClosedByRequestor))
+                .collect(),
+        )
+        .await;
+
+    // Add new Requestor to negotiate with Provider.
+    let framework = framework
+        .add_named_requestor(req_example_config(), "IncomingReq")
+        .unwrap();
+    let record = framework
+        .continue_run_for_named_requestor(
+            "IncomingReq",
+            example_demand(Utc::now() + chrono::Duration::seconds(150)),
+            &record,
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(record.agreements.len(), 1);
 }

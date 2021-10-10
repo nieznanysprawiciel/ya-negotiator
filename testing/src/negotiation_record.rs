@@ -16,6 +16,7 @@ use std::hash::{Hash, Hasher};
 use std::str::FromStr;
 use std::sync::Arc;
 use std::sync::Mutex;
+use ya_client_model::market::proposal::State;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NegotiationStage {
@@ -87,6 +88,21 @@ impl NegotiationRecordSync {
             agreements: Default::default(),
             errors: Default::default(),
             max_steps,
+        })))
+    }
+
+    pub fn from(record: &NegotiationRecord) -> NegotiationRecordSync {
+        NegotiationRecordSync(Arc::new(Mutex::new(NegotiationRecord {
+            results: Default::default(),
+            proposals: record
+                .proposals
+                .iter()
+                .filter(|(_, proposal)| proposal.state == State::Initial)
+                .map(|(key, value)| (key.clone(), value.clone()))
+                .collect(),
+            agreements: Default::default(),
+            errors: Default::default(),
+            max_steps: record.max_steps,
         })))
     }
 

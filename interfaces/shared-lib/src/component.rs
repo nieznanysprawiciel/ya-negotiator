@@ -7,7 +7,7 @@ use crate::interface::{load_library, BoxedSharedNegotiatorAPI};
 use serde_json::Value;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, PostTerminateEvent, Score,
+    AgreementEvent, AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
 
 #[derive(thiserror::Error, Debug)]
@@ -131,7 +131,7 @@ impl NegotiatorComponent for SharedLibNegotiator {
     fn on_post_terminate_event(
         &mut self,
         agreement_id: &str,
-        event: &PostTerminateEvent,
+        event: &AgreementEvent,
     ) -> anyhow::Result<()> {
         let event = serde_json::to_string(&event).map_err(SharedLibError::from)?;
         Ok(self

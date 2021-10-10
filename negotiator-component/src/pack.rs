@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 
 use crate::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, PostTerminateEvent, Score,
+    AgreementEvent, AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
 
 pub struct NegotiatorsPack {
@@ -155,7 +155,7 @@ impl NegotiatorComponent for NegotiatorsPack {
     fn on_post_terminate_event(
         &mut self,
         agreement_id: &str,
-        event: &PostTerminateEvent,
+        event: &AgreementEvent,
     ) -> anyhow::Result<()> {
         for (name, component) in &mut self.components {
             component

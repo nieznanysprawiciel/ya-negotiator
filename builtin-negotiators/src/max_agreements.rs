@@ -8,7 +8,6 @@ use ya_agreement_utils::{AgreementView, ProposalView};
 use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
-use ya_negotiator_component::transparent_impl;
 
 /// Negotiator that can limit number of running agreements.
 pub struct MaxAgreements {
@@ -86,9 +85,4 @@ impl NegotiatorComponent for MaxAgreements {
             )
         }
     }
-
-    transparent_impl!(fill_template);
-    transparent_impl!(on_proposal_rejected);
-    transparent_impl!(on_post_terminate_event);
-    transparent_impl!(control_event);
 }

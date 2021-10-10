@@ -9,7 +9,7 @@ use ya_client_model::market::{NewOffer, NewProposal, Proposal, Reason};
 
 use crate::component::AgreementResult;
 use crate::Negotiator;
-use ya_negotiator_component::component::PostTerminateEvent;
+use ya_negotiator_component::component::AgreementEvent;
 
 /// Response for requestor proposals.
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
@@ -96,7 +96,7 @@ pub struct AgreementFinalized {
 #[rtype(result = "Result<()>")]
 pub struct PostAgreementEvent {
     pub agreement_id: String,
-    pub event: PostTerminateEvent,
+    pub event: AgreementEvent,
 }
 
 /// Proposal was rejected by other party.
@@ -186,7 +186,7 @@ impl NegotiatorAddr {
     pub async fn post_agreement_event(
         &self,
         agreement_id: &str,
-        event: PostTerminateEvent,
+        event: AgreementEvent,
     ) -> Result<()> {
         self.0
             .send(PostAgreementEvent {

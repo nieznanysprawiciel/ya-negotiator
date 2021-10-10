@@ -11,8 +11,8 @@ use ya_client_model::market::Reason;
 
 #[derive(Debug)]
 pub struct ProposalScore {
-    pub proposal: ProposalView,
-    pub prev: ProposalView,
+    pub their: ProposalView,
+    pub our: ProposalView,
     pub score: f64,
 }
 
@@ -22,9 +22,14 @@ pub enum DecideReason {
     GoalReached,
 }
 
-#[derive(Message, Debug)]
-#[rtype(result = "()")]
-pub enum Feedback {
+#[derive(Debug, Copy, Clone)]
+pub enum CollectionType {
+    Agreement,
+    Proposal,
+}
+
+#[derive(Debug)]
+pub enum FeedbackAction {
     Decide(DecideReason),
     Accept {
         id: String,
@@ -34,6 +39,13 @@ pub enum Feedback {
         reason: Option<Reason>,
         is_final: bool,
     },
+}
+
+#[derive(Message, Debug)]
+#[rtype(result = "()")]
+pub struct Feedback {
+    pub action: FeedbackAction,
+    pub collection_type: CollectionType,
 }
 
 /// Stores Proposals together with their Score. Triggers decision based on
@@ -54,12 +66,14 @@ pub struct ProposalsCollection {
 
     collect_timeout_handle: Option<AbortHandle>,
 
+    collection_type: CollectionType,
+
     feedback_channel: mpsc::UnboundedSender<Feedback>,
     pub feedback_receiver: Option<mpsc::UnboundedReceiver<Feedback>>,
 }
 
 impl ProposalsCollection {
-    pub fn new() -> ProposalsCollection {
+    pub fn new(collection_type: CollectionType) -> ProposalsCollection {
         let (feedback_sender, feedback_receiver) = mpsc::unbounded_channel();
 
         ProposalsCollection {
@@ -71,14 +85,20 @@ impl ProposalsCollection {
             collect_timeout_handle: None,
             feedback_channel: feedback_sender,
             feedback_receiver: Some(feedback_receiver),
+            collection_type,
         }
     }
 
     /// Collects Proposals, that were already fully negotiated and score
     /// for them was computed.
     pub fn new_scored(&mut self, new: ProposalScore) -> anyhow::Result<()> {
+        log::info!(
+            "Adding Proposal/Agreement [{}] to choose later.",
+            new.their.id
+        );
+
         if new.score.is_nan() {
-            bail!("Proposal [{}] score was set to NaN.", new.proposal.id);
+            bail!("Proposal [{}] score was set to NaN.", new.their.id);
         }
 
         // Keep vector sorted.
@@ -95,9 +115,7 @@ impl ProposalsCollection {
         // Check if we reached number of Proposals, by which we should make
         // decision immediately without waiting `collect_period`.
         if self.awaiting.len() >= self.collect_amount {
-            self.feedback_channel
-                .send(Feedback::Decide(DecideReason::GoalReached))
-                .map_err(|_| anyhow!("Feedback channel closed."))?;
+            self.send_feedback(FeedbackAction::Decide(DecideReason::GoalReached))?;
         }
 
         Ok(())
@@ -107,6 +125,11 @@ impl ProposalsCollection {
     /// Rest of the Proposals is rejected and they are all placed in queue
     /// for future, in case not enough Agreements will be signed.
     pub fn decide(&mut self) -> anyhow::Result<()> {
+        log::debug!(
+            "Deciding which Proposals/Agreements to choose. Goal to choose: {}",
+            self.goal
+        );
+
         let goal = min(self.goal, self.awaiting.len());
 
         // Vector is sorted so the best elements are on the beginning.
@@ -116,22 +139,22 @@ impl ProposalsCollection {
         // Since we will choose some Proposals, we must adjust how many we expect left.
         self.goal = self.goal - goal;
 
+        log::info!("Decided to accept {} Proposal(s)/Agreement(s).", goal);
+
         for proposal in accepted {
-            self.feedback_channel
-                .send(Feedback::Accept {
-                    id: proposal.proposal.id,
-                })
-                .ok();
+            self.send_feedback(FeedbackAction::Accept {
+                id: proposal.their.id,
+            })
+            .ok();
         }
 
         for proposal in rejected {
-            self.feedback_channel
-                .send(Feedback::Reject {
-                    id: proposal.proposal.id.clone(),
-                    reason: Some(Reason::new("Node is busy.")),
-                    is_final: false,
-                })
-                .ok();
+            self.send_feedback(FeedbackAction::Reject {
+                id: proposal.their.id.clone(),
+                reason: Some(Reason::new("Node is busy.")),
+                is_final: false,
+            })
+            .ok();
 
             // We collect Proposals with too low score.
             // Proposals with invalid score won't be added.
@@ -147,7 +170,7 @@ impl ProposalsCollection {
 
     fn add_rejected(&mut self, new: ProposalScore) -> anyhow::Result<()> {
         if new.score.is_nan() {
-            bail!("Proposal [{}] score was set to NaN.", new.proposal.id);
+            bail!("Proposal [{}] score was set to NaN.", new.their.id);
         }
 
         // Keep vector sorted.
@@ -174,16 +197,30 @@ impl ProposalsCollection {
 
         let timeout = self.collect_period.clone();
         let feedback = self.feedback_channel.clone();
+        let collection_type = self.collection_type;
 
         let future = async move {
             tokio::time::delay_for(timeout).await;
             feedback
-                .send(Feedback::Decide(DecideReason::TimeElapsed))
+                .send(Feedback {
+                    action: FeedbackAction::Decide(DecideReason::TimeElapsed),
+                    collection_type,
+                })
                 .ok();
         };
 
         tokio::spawn(Abortable::new(future, abort_registration));
 
         self.collect_timeout_handle = Some(abort_handle);
+    }
+
+    fn send_feedback(&self, action: FeedbackAction) -> anyhow::Result<()> {
+        Ok(self
+            .feedback_channel
+            .send(Feedback {
+                action,
+                collection_type: self.collection_type,
+            })
+            .map_err(|_| anyhow!("Feedback channel closed."))?)
     }
 }

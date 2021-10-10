@@ -4,7 +4,7 @@ use std::path::PathBuf;
 
 use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
 use ya_negotiators::factory::*;
-use ya_negotiators::{Action, NegotiatorCallbacks};
+use ya_negotiators::{NegotiatorCallbacks, ProposalAction};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewDemand, Proposal};
@@ -111,7 +111,7 @@ async fn test_shared_library() {
         .unwrap();
 
     match proposals.recv().await {
-        Some(Action::RejectProposal { .. }) => {}
+        Some(ProposalAction::RejectProposal { .. }) => {}
         _ => panic!("Expected reject proposal"),
     }
 
@@ -125,7 +125,7 @@ async fn test_shared_library() {
         .unwrap();
 
     match proposals.recv().await {
-        Some(Action::AcceptProposal { .. }) => {}
+        Some(ProposalAction::AcceptProposal { .. }) => {}
         _ => panic!("Expected AcceptProposal"),
     }
 }

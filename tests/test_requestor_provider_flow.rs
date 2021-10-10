@@ -73,10 +73,16 @@ async fn test_requestor_provider_flow() {
         .await
         .unwrap();
 
+    println!("{}", record);
+
+    assert_eq!(framework.providers.len(), 1);
+    assert_eq!(framework.requestors.len(), 1);
+
+    assert!(!record.results.is_empty());
     record
         .results
         .iter()
-        .for_each(|(_nodes, result)| assert!(result.agreement.is_some()));
+        .for_each(|(_nodes, result)| result.is_finished_with_agreement().unwrap());
 
     let results = framework
         .run_finalize_agreements(

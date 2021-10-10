@@ -1,11 +1,11 @@
 use ya_agreement_utils::AgreementView;
-use ya_negotiators::{Action, AgreementAction};
 
 use ya_client_model::market::{NewProposal, Proposal, Reason};
 use ya_client_model::NodeId;
 
 use crate::error::NegotiatorError;
 
+use anyhow::bail;
 use backtrace::Backtrace;
 use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
@@ -19,13 +19,37 @@ use std::sync::Mutex;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum NegotiationStage {
-    Proposal(Action),
-    Agreement(AgreementAction),
+    CounterProposal {
+        node_id: NodeId,
+        id: String,
+        proposal: NewProposal,
+    },
+    AcceptProposal {
+        node_id: NodeId,
+        id: String,
+    },
+    RejectProposal {
+        node_id: NodeId,
+        id: String,
+        reason: Option<Reason>,
+    },
+    ApproveAgreement {
+        id: String,
+    },
+    RejectAgreement {
+        id: String,
+        reason: Option<Reason>,
+    },
+    ProposeAgreement {
+        id: String,
+    },
     Error(String),
     InfiniteLoop,
     Timeout,
 }
 
+/// Artifacts and events collected from negotiations between single
+/// Provider/Requestor pair.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NegotiationResult {
     pub stage: Vec<NegotiationStage>,
@@ -37,6 +61,8 @@ pub struct NegotiationResult {
 #[display(fmt = "{}-{}", _0, _1)]
 pub struct NodePair(NodeId, NodeId);
 
+/// Collects all events and artifacts from negotiation run. Allows to make assertions
+/// in test to check, if negotiations were processed as expected.
 #[serde_as]
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NegotiationRecord {
@@ -77,7 +103,7 @@ impl NegotiationRecordSync {
             .push(NegotiationStage::Error(e.to_string()));
     }
 
-    /// Node error, that cannot be assinged to any negotiations pair.
+    /// Node error, that cannot be assigned to any negotiation pair.
     pub fn node_error(&self, owner_node: NodeId, e: anyhow::Error) {
         let mut record = self.0.lock().unwrap();
         record
@@ -96,11 +122,10 @@ impl NegotiationRecordSync {
             .entry(NodePair(counter_proposal.issuer_id, with_node))
             .or_insert(NegotiationResult::new());
 
-        negotiation
-            .stage
-            .push(NegotiationStage::Proposal(Action::AcceptProposal {
-                id: counter_proposal.clone().prev_proposal_id.unwrap(),
-            }));
+        negotiation.stage.push(NegotiationStage::AcceptProposal {
+            node_id: counter_proposal.issuer_id,
+            id: counter_proposal.clone().prev_proposal_id.unwrap(),
+        });
 
         negotiation.proposals.push(counter_proposal.clone());
 
@@ -122,15 +147,14 @@ impl NegotiationRecordSync {
             .entry(NodePair(counter_proposal.issuer_id, with_node))
             .or_insert(NegotiationResult::new());
 
-        negotiation
-            .stage
-            .push(NegotiationStage::Proposal(Action::CounterProposal {
-                id: counter_proposal.clone().prev_proposal_id.unwrap(),
-                proposal: NewProposal {
-                    properties: counter_proposal.properties.clone(),
-                    constraints: counter_proposal.constraints.clone(),
-                },
-            }));
+        negotiation.stage.push(NegotiationStage::CounterProposal {
+            node_id: counter_proposal.issuer_id,
+            id: counter_proposal.clone().prev_proposal_id.unwrap(),
+            proposal: NewProposal {
+                properties: counter_proposal.properties.clone(),
+                constraints: counter_proposal.constraints.clone(),
+            },
+        });
 
         negotiation.proposals.push(counter_proposal.clone());
 
@@ -150,29 +174,20 @@ impl NegotiationRecordSync {
             .entry(NodePair(owner_node, rejected_proposal.issuer_id))
             .or_insert(NegotiationResult::new());
 
-        negotiation
-            .stage
-            .push(NegotiationStage::Proposal(Action::RejectProposal {
-                id: rejected_proposal.prev_proposal_id.unwrap(),
-                reason,
-            }));
+        negotiation.stage.push(NegotiationStage::RejectProposal {
+            node_id: owner_node,
+            id: rejected_proposal.prev_proposal_id.unwrap(),
+            reason,
+        });
     }
 
     pub fn approve(&self, agreement: AgreementView) {
         let mut record = self.0.lock().unwrap();
-        let negotiation = record
-            .results
-            .entry(NodePair(
-                agreement.requestor_id().unwrap().clone(),
-                agreement.provider_id().unwrap().clone(),
-            ))
-            .or_insert(NegotiationResult::new());
 
-        negotiation.stage.push(NegotiationStage::Agreement(
-            AgreementAction::ApproveAgreement {
-                id: agreement.id.clone(),
-            },
-        ));
+        let negotiation = record.negotiation_for(&agreement);
+        negotiation.stage.push(NegotiationStage::ApproveAgreement {
+            id: agreement.id.clone(),
+        });
 
         negotiation.agreement = Some(agreement.clone());
         record.agreements.insert(agreement.id.clone(), agreement);
@@ -180,25 +195,24 @@ impl NegotiationRecordSync {
 
     pub fn reject_agreement(&self, agreement: AgreementView, reason: Option<Reason>) {
         let mut record = self.0.lock().unwrap();
-        let negotiation = record
-            .results
-            .entry(NodePair(
-                agreement.requestor_id().unwrap().clone(),
-                agreement.provider_id().unwrap().clone(),
-            ))
-            .or_insert(NegotiationResult::new());
 
-        negotiation.stage.push(NegotiationStage::Agreement(
-            AgreementAction::RejectAgreement {
-                id: agreement.id.clone(),
-                reason,
-            },
-        ));
+        let negotiation = record.negotiation_for(&agreement);
+        negotiation.stage.push(NegotiationStage::RejectAgreement {
+            id: agreement.id.clone(),
+            reason,
+        });
     }
 
     pub fn propose_agreement(&self, agreement: AgreementView) {
         let mut record = self.0.lock().unwrap();
-        record.agreements.insert(agreement.id.clone(), agreement);
+        record
+            .agreements
+            .insert(agreement.id.clone(), agreement.clone());
+
+        let negotiation = record.negotiation_for(&agreement);
+        negotiation.stage.push(NegotiationStage::ProposeAgreement {
+            id: agreement.id.clone(),
+        });
     }
 
     pub fn get_proposal(&self, id: &String) -> Result<Proposal, NegotiatorError> {
@@ -246,6 +260,15 @@ impl NegotiationRecord {
                 trace: format!("{:?}", Backtrace::new()),
             })
     }
+
+    pub fn negotiation_for(&mut self, agreement: &AgreementView) -> &mut NegotiationResult {
+        self.results
+            .entry(NodePair(
+                agreement.requestor_id().unwrap().clone(),
+                agreement.provider_id().unwrap().clone(),
+            ))
+            .or_insert(NegotiationResult::new())
+    }
 }
 
 impl NegotiationResult {
@@ -256,8 +279,8 @@ impl NegotiationResult {
 
         match self.stage.last() {
             Some(stage) => match stage {
-                NegotiationStage::Proposal(Action::RejectProposal { .. }) => true,
-                NegotiationStage::Agreement(AgreementAction::RejectAgreement { .. }) => true,
+                NegotiationStage::RejectAgreement { .. } => true,
+                NegotiationStage::ApproveAgreement { .. } => true,
                 NegotiationStage::Error(_) => true,
                 NegotiationStage::InfiniteLoop => true,
                 NegotiationStage::Timeout => true,
@@ -265,6 +288,33 @@ impl NegotiationResult {
             },
             None => false,
         }
+    }
+
+    pub fn is_finished_with_agreement(&self) -> anyhow::Result<()> {
+        if !self.agreement.is_some() {
+            bail!("Agreement was not created.");
+        }
+
+        let provider_id = match self.stage.last() {
+            Some(stage) => match stage {
+                NegotiationStage::ApproveAgreement { id } => id.clone(),
+                _ => bail!("Last negotiation stage is not an Agreement Approval."),
+            },
+            None => bail!("No negotiations."),
+        };
+
+        let requestor_id = match self.stage.get(self.stage.len() - 2) {
+            Some(stage) => match stage {
+                NegotiationStage::ProposeAgreement { id } => id.clone(),
+                _ => bail!("Last negotiation stage is not an Propose Agreement."),
+            },
+            None => bail!("No negotiations."),
+        };
+
+        if provider_id != requestor_id {
+            bail!("Something wrong. Provider and Requestor Agreement id doesn't match");
+        }
+        Ok(())
     }
 }
 

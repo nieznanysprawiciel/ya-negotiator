@@ -13,7 +13,7 @@ use ya_client_model::market::{Agreement, Demand, DemandOfferBase, Offer, Proposa
 use ya_client_model::NodeId;
 use ya_negotiators::factory::{create_negotiator, NegotiatorsConfig};
 use ya_negotiators::{
-    Action, AgreementAction, AgreementResult, NegotiatorAddr, NegotiatorCallbacks,
+    AgreementAction, AgreementResult, NegotiatorAddr, NegotiatorCallbacks, ProposalAction,
 };
 
 pub enum NodeType {
@@ -28,7 +28,7 @@ pub struct Node {
     pub name: String,
 
     pub agreement_sender: broadcast::Sender<AgreementAction>,
-    pub proposal_sender: broadcast::Sender<Action>,
+    pub proposal_sender: broadcast::Sender<ProposalAction>,
 }
 
 impl Node {
@@ -80,7 +80,7 @@ impl Node {
         self.agreement_sender.subscribe()
     }
 
-    pub fn proposal_channel(&self) -> broadcast::Receiver<Action> {
+    pub fn proposal_channel(&self) -> broadcast::Receiver<ProposalAction> {
         self.proposal_sender.subscribe()
     }
 
@@ -91,7 +91,7 @@ impl Node {
             NodeType::Requestor => State::Draft,
         };
 
-        Ok(self.into_proposal(offer, state))
+        Ok(self.into_proposal(offer, state, None))
     }
 
     pub async fn react_to_proposal(
@@ -122,7 +122,12 @@ impl Node {
             .await
     }
 
-    pub fn into_proposal(&self, offer: DemandOfferBase, state: State) -> Proposal {
+    pub fn into_proposal(
+        &self,
+        offer: DemandOfferBase,
+        state: State,
+        prev: Option<String>,
+    ) -> Proposal {
         Proposal {
             properties: offer.properties,
             constraints: offer.constraints,
@@ -130,7 +135,7 @@ impl Node {
             issuer_id: self.node_id,
             state,
             timestamp: Utc::now(),
-            prev_proposal_id: None,
+            prev_proposal_id: prev,
         }
     }
 

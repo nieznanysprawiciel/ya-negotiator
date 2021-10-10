@@ -40,6 +40,8 @@ pub struct Framework {
 
 impl Framework {
     pub fn new_empty(test_name: &str) -> anyhow::Result<Framework> {
+        let _ = env_logger::builder().try_init();
+
         Ok(Framework {
             requestors: HashMap::new(),
             providers: HashMap::new(),

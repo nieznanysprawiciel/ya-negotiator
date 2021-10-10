@@ -38,7 +38,9 @@ tokio = { version = "0.2.6", features = ["sync"] }
 
 [dev-dependencies]
 chrono = "0.4.10"
+
 ya-negotiators-testing = { path = "testing" }
+
 # Test will link this library dynamically
 dll-negotiator = { path = "examples/dll-negotiator" }
 

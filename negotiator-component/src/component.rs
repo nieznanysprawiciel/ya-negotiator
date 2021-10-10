@@ -140,7 +140,7 @@ pub trait NegotiatorComponent {
 
     /// Notifies `NegotiatorComponent`, about events related to Agreement appearing after
     /// it's termination.
-    fn on_post_terminate_event(
+    fn on_agreement_event(
         &mut self,
         _agreement_id: &str,
         _event: &AgreementEvent,

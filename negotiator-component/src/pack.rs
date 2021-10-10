@@ -152,14 +152,14 @@ impl NegotiatorComponent for NegotiatorsPack {
         Ok(())
     }
 
-    fn on_post_terminate_event(
+    fn on_agreement_event(
         &mut self,
         agreement_id: &str,
         event: &AgreementEvent,
     ) -> anyhow::Result<()> {
         for (name, component) in &mut self.components {
             component
-                .on_post_terminate_event(agreement_id, event)
+                .on_agreement_event(agreement_id, event)
                 .map_err(|e| {
                     log::warn!(
                         "Negotiator component '{}' failed handling post Terminate event [{}]. {}",

@@ -284,7 +284,7 @@ impl Handler<PostAgreementEvent> for Negotiator {
 
     fn handle(&mut self, msg: PostAgreementEvent, _: &mut Context<Self>) -> Self::Result {
         self.components
-            .on_post_terminate_event(&msg.agreement_id, &msg.event)
+            .on_agreement_event(&msg.agreement_id, &msg.event)
     }
 }
 

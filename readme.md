@@ -16,7 +16,7 @@ Library for writing custom plugable negotiators for Yagna Agents.
     - [x] Events notification
         - [x] Proposal rejection
         - [x] Invoice events (Accepted, Rejected, Paid)
-    - [x] Allowing components to read/write files in specified directory (persistence). (This could be useful for storing reputation records or example.)
+    - [x] Allowing components to read/write files in specified directory (persistence). (This could be useful for storing reputation records)
     - [ ] Allow setting some configuration values from code. Merge config loaded from yaml and overriden values from code. (Some values in Provider are set in command line and  don't want to move them to config file.)
 - [ ] Rewrite shared libraries API to use C abi. (This will make it possible to integrate shared libraries with other languages.)
 - [ ] Support for Negotiators in binaries with RPC communication.

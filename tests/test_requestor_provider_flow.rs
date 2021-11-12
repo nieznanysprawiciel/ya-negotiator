@@ -96,8 +96,8 @@ async fn test_requestor_provider_flow() {
         panic!("{:?}", results);
     }
 
-    println!("{}", record);
-    //assert!(false);
+    // println!("{}", record);
+    // assert!(false);
 }
 
 /// Provider should be able to negotiate with new Requestor after previous Agreement is finished.
@@ -128,6 +128,10 @@ async fn test_negotiations_after_agreement_termination() {
         )
         .await;
 
+    for (_, node) in framework.providers.iter() {
+        node.request_agreements(1).await.unwrap();
+    }
+
     // Add new Requestor to negotiate with Provider.
     let framework = framework
         .add_named_requestor(req_example_config(), "IncomingReq")
@@ -142,4 +146,9 @@ async fn test_negotiations_after_agreement_termination() {
         .unwrap();
 
     assert_eq!(record.agreements.len(), 1);
+    assert!(!record.results.is_empty());
+    record
+        .results
+        .iter()
+        .for_each(|(_nodes, result)| result.is_finished_with_agreement().unwrap());
 }

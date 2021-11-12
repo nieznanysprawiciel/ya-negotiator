@@ -115,6 +115,11 @@ pub struct ControlEvent {
     pub params: serde_json::Value,
 }
 
+/// Negotiator should provide expected number of Agreements.
+#[derive(Message)]
+#[rtype(result = "()")]
+pub struct RequestAgreements(pub usize);
+
 // TODO: Consider, if this struct is helpful at all and remove if not.
 #[derive(Clone)]
 pub struct NegotiatorAddr(pub Addr<Negotiator>);
@@ -207,6 +212,10 @@ impl NegotiatorAddr {
                 params,
             })
             .await?
+    }
+
+    pub async fn request_agreements(&self, count: usize) -> Result<()> {
+        Ok(self.0.send(RequestAgreements(count)).await?)
     }
 
     pub fn from(negotiator: Negotiator) -> NegotiatorAddr {

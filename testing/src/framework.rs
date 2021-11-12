@@ -11,7 +11,7 @@ use crate::provider::{provider_agreements_processor, provider_proposals_processo
 use crate::requestor::{requestor_agreements_processor, requestor_proposals_processor};
 
 use crate::prepare_test_dir;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use futures::future::select_all;
 use futures::{Future, FutureExt};
 use std::collections::HashMap;
@@ -103,6 +103,17 @@ impl Framework {
         Ok(self)
     }
 
+    pub async fn request_agreements(&self, name: &str, count: usize) -> anyhow::Result<()> {
+        if let Ok(node) = self.provider(name) {
+            node.request_agreements(count).await?
+        }
+        if let Ok(node) = self.requestor(name) {
+            node.request_agreements(count).await?
+        }
+
+        bail!("Requestor/Provider named {} not found.", name)
+    }
+
     pub async fn run_for_templates(
         &self,
         demand: OfferTemplate,
@@ -168,6 +179,24 @@ impl Framework {
         }
     }
 
+    pub fn requestor(&self, name: &str) -> anyhow::Result<Arc<Node>> {
+        Ok(self
+            .requestors
+            .iter()
+            .find(|(_, node)| node.name == name)
+            .map(|(_, node)| node.clone())
+            .ok_or(anyhow!("Requestor {} not found.", name))?)
+    }
+
+    pub fn provider(&self, name: &str) -> anyhow::Result<Arc<Node>> {
+        Ok(self
+            .providers
+            .iter()
+            .find(|(_, node)| node.name == name)
+            .map(|(_, node)| node.clone())
+            .ok_or(anyhow!("Provider {} not found.", name))?)
+    }
+
     pub async fn continue_run_for_named_requestor(
         &self,
         name: &str,
@@ -176,14 +205,8 @@ impl Framework {
     ) -> Result<NegotiationRecord, FrameworkError> {
         let record = NegotiationRecordSync::from(record);
         let node = self
-            .requestors
-            .iter()
-            .find(|(_, node)| node.name == name)
-            .map(|(_, node)| node.clone())
-            .ok_or(FrameworkError::from(
-                anyhow!("Requestor {} not found.", name),
-                &record,
-            ))?;
+            .requestor(name)
+            .map_err(|e| FrameworkError::from(e, &record))?;
 
         let offers = record
             .0

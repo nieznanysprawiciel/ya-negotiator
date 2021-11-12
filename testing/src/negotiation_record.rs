@@ -44,6 +44,9 @@ pub enum NegotiationStage {
     ProposeAgreement {
         id: String,
     },
+    CreateAgreement {
+        id: String,
+    },
     Error(String),
     InfiniteLoop,
     Timeout,
@@ -204,9 +207,6 @@ impl NegotiationRecordSync {
         negotiation.stage.push(NegotiationStage::ApproveAgreement {
             id: agreement.id.clone(),
         });
-
-        negotiation.agreement = Some(agreement.clone());
-        record.agreements.insert(agreement.id.clone(), agreement);
     }
 
     pub fn reject_agreement(&self, agreement: AgreementView, reason: Option<Reason>) {
@@ -221,12 +221,23 @@ impl NegotiationRecordSync {
 
     pub fn propose_agreement(&self, agreement: AgreementView) {
         let mut record = self.0.lock().unwrap();
+
+        let negotiation = record.negotiation_for(&agreement);
+
+        negotiation.agreement = Some(agreement.clone());
+        negotiation.stage.push(NegotiationStage::ProposeAgreement {
+            id: agreement.id.clone(),
+        });
+    }
+
+    pub fn create_agreement(&self, agreement: AgreementView) {
+        let mut record = self.0.lock().unwrap();
         record
             .agreements
             .insert(agreement.id.clone(), agreement.clone());
 
         let negotiation = record.negotiation_for(&agreement);
-        negotiation.stage.push(NegotiationStage::ProposeAgreement {
+        negotiation.stage.push(NegotiationStage::CreateAgreement {
             id: agreement.id.clone(),
         });
     }
@@ -289,10 +300,6 @@ impl NegotiationRecord {
 
 impl NegotiationResult {
     pub fn is_finished(&self) -> bool {
-        if self.agreement.is_some() {
-            return true;
-        }
-
         match self.stage.last() {
             Some(stage) => match stage {
                 NegotiationStage::RejectAgreement { .. } => true,

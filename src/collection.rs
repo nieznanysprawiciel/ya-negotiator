@@ -22,6 +22,18 @@ pub enum DecideReason {
     GoalReached,
 }
 
+/// Decision making mode.
+#[derive(Debug)]
+pub enum DecideGoal {
+    /// ProposalsCollection is expected to provide limited number of Proposals.
+    /// After goal is reached, no new Proposals will be chosen. Someone must
+    /// set new goal to get new Proposals.
+    Limit(usize),
+    /// ProposalsCollection provides batches of certain size. Chosen Proposals'
+    /// count isn't subtracted, so there is no limit of them.
+    Batch(usize),
+}
+
 #[derive(Debug, Copy, Clone)]
 pub enum CollectionType {
     Agreement,
@@ -57,8 +69,9 @@ pub struct ProposalsCollection {
     /// with `final` flag.
     rejected: Vec<ProposalScore>,
 
-    /// Expected number of Proposals to choose.
-    goal: usize,
+    /// Expected number of Proposals to choose or batch size. See DecideGoal description.
+    goal: DecideGoal,
+
     /// Time period before making decision, which Proposals to choose.
     collect_period: Duration,
     /// Number of Proposals to collect, after which best of them will be accepted.
@@ -66,6 +79,7 @@ pub struct ProposalsCollection {
 
     collect_timeout_handle: Option<AbortHandle>,
 
+    /// This collection handles Agreements or Proposals.
     collection_type: CollectionType,
 
     feedback_channel: mpsc::UnboundedSender<Feedback>,
@@ -73,19 +87,33 @@ pub struct ProposalsCollection {
 }
 
 impl ProposalsCollection {
-    pub fn new(collection_type: CollectionType) -> ProposalsCollection {
+    pub fn new(collection_type: CollectionType, goal: DecideGoal) -> ProposalsCollection {
         let (feedback_sender, feedback_receiver) = mpsc::unbounded_channel();
 
         ProposalsCollection {
             awaiting: vec![],
             rejected: vec![],
-            goal: 1,
             collect_period: Duration::from_secs(3600),
             collect_amount: 1,
             collect_timeout_handle: None,
             feedback_channel: feedback_sender,
             feedback_receiver: Some(feedback_receiver),
             collection_type,
+            goal,
+        }
+    }
+
+    pub fn set_goal(&mut self, goal: DecideGoal) {
+        match self.goal {
+            DecideGoal::Limit(current) => match goal {
+                DecideGoal::Limit(num_requested) => {
+                    self.goal = DecideGoal::Limit(num_requested + current)
+                }
+                DecideGoal::Batch(_) => self.goal = goal,
+            },
+            DecideGoal::Batch(_) => {
+                self.goal = goal;
+            }
         }
     }
 
@@ -125,12 +153,19 @@ impl ProposalsCollection {
     /// Rest of the Proposals is rejected and they are all placed in queue
     /// for future, in case not enough Agreements will be signed.
     pub fn decide(&mut self) -> anyhow::Result<()> {
-        log::debug!(
-            "Deciding which Proposals/Agreements to choose. Goal to choose: {}",
-            self.goal
-        );
+        let goal = match self.goal {
+            DecideGoal::Limit(expected_goal) => {
+                let goal = min(expected_goal, self.awaiting.len());
+                self.goal = DecideGoal::Limit(expected_goal - goal);
+                goal
+            }
+            DecideGoal::Batch(batch_size) => min(batch_size, self.awaiting.len()),
+        };
 
-        let goal = min(self.goal, self.awaiting.len());
+        log::debug!(
+            "Deciding which Proposals/Agreements to choose. Expected count: {}",
+            goal
+        );
 
         // Vector is sorted so the best elements are on the beginning.
         let accepted = self.awaiting.drain(0..goal).collect::<Vec<_>>();

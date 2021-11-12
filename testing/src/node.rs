@@ -84,6 +84,10 @@ impl Node {
         self.proposal_sender.subscribe()
     }
 
+    pub async fn request_agreements(&self, count: usize) -> Result<()> {
+        Ok(self.negotiator.request_agreements(count).await?)
+    }
+
     pub async fn create_offer(&self, template: &OfferTemplate) -> Result<Proposal> {
         let offer = self.negotiator.create_offer(&template).await?;
         let state = match self.node_type {

@@ -79,7 +79,7 @@ impl RequestorReactions {
         let agreement = requestor.create_agreement(&req_proposal, &prov_proposal);
         let agreement = AgreementView::try_from(&agreement).unwrap();
 
-        record.propose_agreement(agreement.clone());
+        record.create_agreement(agreement.clone());
 
         log::info!(
             "Requestor [{}] will react to Agreement {}",
@@ -162,7 +162,7 @@ impl RequestorReactions {
         let provider_id = agreement.provider_id()?.clone();
         let provider = self.get_provider(&provider_id)?;
 
-        record.approve(agreement.clone());
+        record.propose_agreement(agreement.clone());
 
         log::info!(
             "Requestor [{}] will send Agreement {} to {}",

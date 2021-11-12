@@ -12,12 +12,14 @@ use ya_client_model::market::{NewOffer, Reason};
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
 use crate::negotiators::{
     AgreementAction, AgreementSigned, ControlEvent, PostAgreementEvent, ProposalAction,
-    ProposalRejected,
+    ProposalRejected, RequestAgreements,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::{NegotiatorsPack, ProposalsCollection};
 
-use crate::collection::{CollectionType, DecideReason, Feedback, FeedbackAction, ProposalScore};
+use crate::collection::{
+    CollectionType, DecideGoal, DecideReason, Feedback, FeedbackAction, ProposalScore,
+};
 use std::collections::HashMap;
 use ya_agreement_utils::agreement::expand;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
@@ -72,8 +74,8 @@ impl Negotiator {
             components,
             proposal_channel: proposal_sender.clone(),
             agreement_channel: agreement_sender,
-            proposals: ProposalsCollection::new(CollectionType::Proposal),
-            agreements: ProposalsCollection::new(CollectionType::Agreement),
+            proposals: ProposalsCollection::new(CollectionType::Proposal, DecideGoal::Batch(10)),
+            agreements: ProposalsCollection::new(CollectionType::Agreement, DecideGoal::Limit(1)),
             proposal_agreement: Default::default(),
         };
 
@@ -296,6 +298,17 @@ impl Handler<ControlEvent> for Negotiator {
     }
 }
 
+impl Handler<RequestAgreements> for Negotiator {
+    type Result = ();
+
+    fn handle(&mut self, msg: RequestAgreements, _: &mut Context<Self>) -> Self::Result {
+        self.agreements.set_goal(DecideGoal::Limit(msg.0))
+    }
+}
+
+/// Executes actions proposed by ProposalCollections. ProposalCollection collects
+/// Agreements/Proposals and decides, when we should send responses based on scores,
+/// number of artifacts collected, timeouts etc.
 impl StreamHandler<Feedback> for Negotiator {
     fn handle(&mut self, item: Feedback, _ctx: &mut Context<Self>) {
         match item.collection_type {

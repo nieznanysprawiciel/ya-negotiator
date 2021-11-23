@@ -42,6 +42,7 @@ fn example_config() -> NegotiatorsConfig {
 
     NegotiatorsConfig {
         negotiators: vec![filter_conf],
+        composite: CompositeNegotiatorConfig::default_test()
     }
 }
 

@@ -15,6 +15,7 @@ use crate::builtin::AcceptAll;
 use crate::builtin::LimitExpiration;
 use crate::builtin::MaxAgreements;
 use crate::composite::NegotiatorCallbacks;
+pub use crate::composite::CompositeNegotiatorConfig;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
 #[non_exhaustive]
@@ -34,6 +35,7 @@ pub struct NegotiatorConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NegotiatorsConfig {
     pub negotiators: Vec<NegotiatorConfig>,
+    pub composite: CompositeNegotiatorConfig,
 }
 
 pub fn create_negotiator(
@@ -60,7 +62,7 @@ pub fn create_negotiator(
         components = components.add_component(&name, negotiator);
     }
 
-    let (negotiator, callbacks) = Negotiator::new(components);
+    let (negotiator, callbacks) = Negotiator::new(components, config.composite);
     Ok((Arc::new(NegotiatorAddr::from(negotiator)), callbacks))
 }
 
@@ -114,6 +116,7 @@ mod tests {
 
         let config = NegotiatorsConfig {
             negotiators: vec![expiration_conf, limit_conf],
+            composite: CompositeNegotiatorConfig::default_provider()
         };
 
         let serialized = serde_yaml::to_string(&config).unwrap();

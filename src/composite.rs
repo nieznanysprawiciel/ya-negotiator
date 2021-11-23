@@ -5,6 +5,8 @@ use serde_json::Value;
 use std::convert::TryFrom;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use std::collections::HashMap;
+use serde::{Serialize, Deserialize};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewOffer, Reason};
@@ -17,18 +19,15 @@ use crate::negotiators::{
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::{NegotiatorsPack, ProposalsCollection};
 
-use crate::collection::{
-    CollectionType, DecideGoal, DecideReason, Feedback, FeedbackAction, ProposalScore,
-};
-use std::collections::HashMap;
+use crate::collection::{CollectionConfig, CollectionType, DecideGoal, DecideReason, Feedback, FeedbackAction, ProposalScore};
+
 use ya_agreement_utils::agreement::expand;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 
-struct NegotiatorConfig {
-    /// Time period before making decision, which Proposals to choose.
-    pub collect_proposals_period: Duration,
-    /// Time period before making decision, which Agreements to choose.
-    pub collect_agreements_period: Duration,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompositeNegotiatorConfig {
+    pub proposals: CollectionConfig,
+    pub agreements: CollectionConfig,
 }
 
 /// Actor implementing Negotiation logic.
@@ -66,7 +65,7 @@ pub struct NegotiatorCallbacks {
 }
 
 impl Negotiator {
-    pub fn new(components: NegotiatorsPack) -> (Negotiator, NegotiatorCallbacks) {
+    pub fn new(components: NegotiatorsPack, config: CompositeNegotiatorConfig) -> (Negotiator, NegotiatorCallbacks) {
         let (proposal_sender, proposal_receiver) = mpsc::unbounded_channel();
         let (agreement_sender, agreement_receiver) = mpsc::unbounded_channel();
 
@@ -74,8 +73,8 @@ impl Negotiator {
             components,
             proposal_channel: proposal_sender.clone(),
             agreement_channel: agreement_sender,
-            proposals: ProposalsCollection::new(CollectionType::Proposal, DecideGoal::Batch(10)),
-            agreements: ProposalsCollection::new(CollectionType::Agreement, DecideGoal::Limit(1)),
+            proposals: ProposalsCollection::new(CollectionType::Proposal, config.proposals),
+            agreements: ProposalsCollection::new(CollectionType::Agreement, config.agreements),
             proposal_agreement: Default::default(),
         };
 
@@ -410,5 +409,37 @@ impl Actor for Negotiator {
             .take()
             .expect("Agreements collection receiver already taken on initialization.");
         Self::add_stream(select(p_channel, a_channel), ctx);
+    }
+}
+
+impl CompositeNegotiatorConfig {
+    pub fn default_provider() -> CompositeNegotiatorConfig {
+        CompositeNegotiatorConfig {
+            proposals: CollectionConfig {
+                collect_period: Some(Duration::from_secs(5)),
+                collect_amount: Some(5),
+                goal: DecideGoal::Batch(10)
+            },
+            agreements: CollectionConfig {
+                collect_period: Some(Duration::from_secs(20)),
+                collect_amount: Some(5),
+                goal: DecideGoal::Limit(1)
+            }
+        }
+    }
+
+    pub fn default_test() -> CompositeNegotiatorConfig {
+        CompositeNegotiatorConfig {
+            proposals: CollectionConfig {
+                collect_period: Some(Duration::from_secs(5)),
+                collect_amount: Some(1),
+                goal: DecideGoal::Batch(10)
+            },
+            agreements: CollectionConfig {
+                collect_period: Some(Duration::from_secs(20)),
+                collect_amount: Some(1),
+                goal: DecideGoal::Limit(1)
+            }
+        }
     }
 }

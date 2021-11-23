@@ -33,6 +33,7 @@ fn example_config() -> NegotiatorsConfig {
 
     NegotiatorsConfig {
         negotiators: vec![expiration_conf, limit_conf],
+        composite: CompositeNegotiatorConfig::default_test()
     }
 }
 

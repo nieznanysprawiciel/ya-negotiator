@@ -19,6 +19,7 @@ fn example_config() -> NegotiatorsConfig {
 
     NegotiatorsConfig {
         negotiators: vec![expiration_conf],
+        composite: CompositeNegotiatorConfig::default_test()
     }
 }
 
@@ -31,8 +32,10 @@ fn req_example_config() -> NegotiatorsConfig {
 
     NegotiatorsConfig {
         negotiators: vec![conf],
+        composite: CompositeNegotiatorConfig::default_test()
     }
 }
+
 
 fn example_offer() -> OfferTemplate {
     OfferDefinition {

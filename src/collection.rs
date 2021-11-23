@@ -4,6 +4,7 @@ use futures::future::{AbortHandle, Abortable};
 use std::cmp::min;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use serde::{Serialize, Deserialize};
 
 use crate::component::ProposalView;
 
@@ -23,7 +24,7 @@ pub enum DecideReason {
 }
 
 /// Decision making mode.
-#[derive(Debug)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum DecideGoal {
     /// ProposalsCollection is expected to provide limited number of Proposals.
     /// After goal is reached, no new Proposals will be chosen. Someone must
@@ -51,6 +52,16 @@ pub enum FeedbackAction {
         reason: Option<Reason>,
         is_final: bool,
     },
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CollectionConfig {
+    /// Time period before making decision, which Proposals to choose.
+    pub collect_period: Option<Duration>,
+    /// Number of Proposals to collect, after which best of them will be accepted.
+    pub collect_amount: Option<usize>,
+    /// Expected number of Proposals to choose or batch size. See DecideGoal description.
+    pub goal: DecideGoal
 }
 
 #[derive(Message, Debug)]
@@ -87,19 +98,19 @@ pub struct ProposalsCollection {
 }
 
 impl ProposalsCollection {
-    pub fn new(collection_type: CollectionType, goal: DecideGoal) -> ProposalsCollection {
+    pub fn new(collection_type: CollectionType, config: CollectionConfig) -> ProposalsCollection {
         let (feedback_sender, feedback_receiver) = mpsc::unbounded_channel();
 
         ProposalsCollection {
             awaiting: vec![],
             rejected: vec![],
-            collect_period: Duration::from_secs(3600),
-            collect_amount: 1,
+            collect_period: config.collect_period.unwrap_or(Duration::MAX),
+            collect_amount: config.collect_amount.unwrap_or(usize::MAX),
             collect_timeout_handle: None,
             feedback_channel: feedback_sender,
             feedback_receiver: Some(feedback_receiver),
             collection_type,
-            goal,
+            goal: config.goal,
         }
     }
 

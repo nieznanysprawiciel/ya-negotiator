@@ -31,7 +31,7 @@ impl RequestorReactions {
         proposal_id: String,
     ) -> anyhow::Result<()> {
         log::info!(
-            "Processing Requestor [{}] accept_proposal for Proposal {}",
+            "Processing Requestor [{}] accept_proposal for Proposal [{}]",
             node_id,
             proposal_id
         );
@@ -59,7 +59,7 @@ impl RequestorReactions {
         // without at least one step of negotiations.
         if let None = prev_req_proposal.prev_proposal_id {
             log::info!(
-                "Requestor [{}] sends counter Proposal {} to {}",
+                "Requestor [{}] sends counter Proposal [{}] to [{}]",
                 node_id,
                 req_proposal.proposal_id,
                 provider.node_id
@@ -74,15 +74,20 @@ impl RequestorReactions {
             return Ok(());
         }
 
-        log::info!("Creating Agreement on Requestor [{}].", node_id,);
-
         let agreement = requestor.create_agreement(&req_proposal, &prov_proposal);
         let agreement = AgreementView::try_from(&agreement).unwrap();
+
+        log::info!(
+            "Creating Agreement [{}] on Requestor [{}] from Proposal [{}].",
+            agreement.id,
+            node_id,
+            proposal_id
+        );
 
         record.create_agreement(agreement.clone());
 
         log::info!(
-            "Requestor [{}] will react to Agreement {}",
+            "Requestor [{}] will react to Agreement [{}]",
             node_id,
             agreement.id,
         );
@@ -101,7 +106,7 @@ impl RequestorReactions {
         reason: Option<Reason>,
     ) -> anyhow::Result<()> {
         log::info!(
-            "Processing Requestor [{}] reject_proposal for Proposal {}",
+            "Processing Requestor [{}] reject_proposal for Proposal [{}]",
             node_id,
             proposal_id
         );
@@ -121,8 +126,8 @@ impl RequestorReactions {
         proposal_id: String,
         proposal: NewProposal,
     ) -> anyhow::Result<()> {
-        log::info!(
-            "Processing Requestor [{}] counter_proposal for Proposal {}",
+        log::debug!(
+            "Processing Requestor [{}] counter_proposal for Proposal [{}]",
             node_id,
             proposal_id
         );
@@ -133,7 +138,14 @@ impl RequestorReactions {
         let prov_proposal = record.get_proposal(&proposal_id)?;
         let provider = self.get_provider(&prov_proposal.issuer_id)?;
 
-        let proposal = requestor.into_proposal(proposal, State::Draft, Some(proposal_id));
+        let proposal = requestor.into_proposal(proposal, State::Draft, Some(proposal_id.clone()));
+
+        log::info!(
+            "Requestor [{}] responded to [{}] with counter Proposal [{}]",
+            node_id,
+            proposal_id,
+            proposal.proposal_id
+        );
 
         // Register event.
         record.counter(proposal.clone(), prov_proposal.issuer_id);
@@ -152,7 +164,7 @@ impl RequestorReactions {
         agreement_id: String,
     ) -> anyhow::Result<()> {
         log::info!(
-            "Processing Requestor [{}] approve_agreement for Agreement {}",
+            "Processing Requestor [{}] approve_agreement for Agreement [{}]",
             node_id,
             agreement_id
         );
@@ -165,7 +177,7 @@ impl RequestorReactions {
         record.propose_agreement(agreement.clone());
 
         log::info!(
-            "Requestor [{}] will send Agreement {} to {}",
+            "Requestor [{}] will send Agreement [{}] to [{}]",
             node_id,
             agreement.id,
             provider_id
@@ -184,7 +196,7 @@ impl RequestorReactions {
         reason: Option<Reason>,
     ) -> anyhow::Result<()> {
         log::info!(
-            "Processing Requestor [{}] reject_agreement for Agreement {}",
+            "Processing Requestor [{}] reject_agreement for Agreement [{}]",
             node_id,
             agreement_id
         );

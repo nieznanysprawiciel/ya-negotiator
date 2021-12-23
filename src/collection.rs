@@ -1,10 +1,11 @@
 use actix::prelude::*;
 use anyhow::{anyhow, bail};
+use derive_more::Display;
 use futures::future::{AbortHandle, Abortable};
+use serde::{Deserialize, Serialize};
 use std::cmp::min;
 use std::time::Duration;
 use tokio::sync::mpsc;
-use serde::{Serialize, Deserialize};
 
 use crate::component::ProposalView;
 
@@ -35,7 +36,7 @@ pub enum DecideGoal {
     Batch(usize),
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Copy, Clone, Display)]
 pub enum CollectionType {
     Agreement,
     Proposal,
@@ -61,7 +62,7 @@ pub struct CollectionConfig {
     /// Number of Proposals to collect, after which best of them will be accepted.
     pub collect_amount: Option<usize>,
     /// Expected number of Proposals to choose or batch size. See DecideGoal description.
-    pub goal: DecideGoal
+    pub goal: DecideGoal,
 }
 
 #[derive(Message, Debug)]
@@ -101,7 +102,7 @@ impl ProposalsCollection {
     pub fn new(collection_type: CollectionType, config: CollectionConfig) -> ProposalsCollection {
         let (feedback_sender, feedback_receiver) = mpsc::unbounded_channel();
 
-        ProposalsCollection {
+        let mut collection = ProposalsCollection {
             awaiting: vec![],
             rejected: vec![],
             collect_period: config.collect_period.unwrap_or(Duration::MAX),
@@ -111,7 +112,10 @@ impl ProposalsCollection {
             feedback_receiver: Some(feedback_receiver),
             collection_type,
             goal: config.goal,
-        }
+        };
+
+        collection.spawn_collect_period();
+        collection
     }
 
     pub fn set_goal(&mut self, goal: DecideGoal) {
@@ -130,14 +134,13 @@ impl ProposalsCollection {
 
     /// Collects Proposals, that were already fully negotiated and score
     /// for them was computed.
-    pub fn new_scored(&mut self, new: ProposalScore) -> anyhow::Result<()> {
-        log::info!(
-            "Adding Proposal/Agreement [{}] to choose later.",
-            new.their.id
-        );
+    /// Note: id is dirty hack to display Agreement id instead of Proposal id here.
+    /// ProposalViews don't contain Agreement id.
+    pub fn new_scored(&mut self, new: ProposalScore, id: &str) -> anyhow::Result<()> {
+        log::info!("Adding {} [{}] to choose later.", self.collection_type, id);
 
         if new.score.is_nan() {
-            bail!("Proposal [{}] score was set to NaN.", new.their.id);
+            bail!("{} [{}] score was set to NaN.", self.collection_type, id);
         }
 
         // Keep vector sorted.
@@ -174,7 +177,8 @@ impl ProposalsCollection {
         };
 
         log::debug!(
-            "Deciding which Proposals/Agreements to choose. Expected count: {}",
+            "Deciding which {}(s) to choose. Expected count: {}",
+            self.collection_type,
             goal
         );
 
@@ -182,7 +186,7 @@ impl ProposalsCollection {
         let accepted = self.awaiting.drain(0..goal).collect::<Vec<_>>();
         let rejected = self.awaiting.drain(..).collect::<Vec<_>>();
 
-        log::info!("Decided to accept {} Proposal(s)/Agreement(s).", goal);
+        log::info!("Decided to accept {} {}(s).", goal, self.collection_type);
 
         for proposal in accepted {
             self.send_feedback(FeedbackAction::Accept {
@@ -213,7 +217,11 @@ impl ProposalsCollection {
 
     fn add_rejected(&mut self, new: ProposalScore) -> anyhow::Result<()> {
         if new.score.is_nan() {
-            bail!("Proposal [{}] score was set to NaN.", new.their.id);
+            bail!(
+                "{} [{}] score was set to NaN.",
+                self.collection_type,
+                new.their.id
+            );
         }
 
         // Keep vector sorted.

@@ -28,7 +28,7 @@ impl ProviderReactions {
         proposal_id: String,
     ) -> anyhow::Result<()> {
         log::info!(
-            "Processing Provider [{}] accept_proposal for Proposal {}",
+            "Processing Provider [{}] accept_proposal for Proposal [{}]",
             node_id,
             proposal_id
         );
@@ -43,6 +43,13 @@ impl ProviderReactions {
             record.get_proposal(&req_proposal.prev_proposal_id.clone().unwrap())?;
 
         let prov_proposal = provider.recounter_proposal(&proposal_id, &prev_prov_proposal);
+
+        log::info!(
+            "Provider [{}] accepted [{}] and responded with the same Proposal with new id [{}].",
+            node_id,
+            proposal_id,
+            prov_proposal.proposal_id
+        );
 
         // Register event.
         record.accept(prov_proposal.clone(), req_proposal.issuer_id);
@@ -94,7 +101,14 @@ impl ProviderReactions {
         let req_proposal = record.get_proposal(&proposal_id)?;
         let requestor = self.get_requestor(&req_proposal.issuer_id)?;
 
-        let proposal = provider.into_proposal(proposal, State::Draft, Some(proposal_id));
+        let proposal = provider.into_proposal(proposal, State::Draft, Some(proposal_id.clone()));
+
+        log::info!(
+            "Provider [{}] responded to [{}] with counter Proposal [{}]",
+            node_id,
+            proposal_id,
+            proposal.proposal_id
+        );
 
         // Register event.
         record.counter(proposal.clone(), req_proposal.issuer_id);

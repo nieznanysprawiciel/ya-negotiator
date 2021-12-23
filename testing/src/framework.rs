@@ -36,6 +36,7 @@ pub struct Framework {
     pub providers: HashMap<NodeId, Arc<Node>>,
 
     pub test_dir: PathBuf,
+    pub test_timeout: Duration,
 }
 
 impl Framework {
@@ -46,6 +47,7 @@ impl Framework {
             requestors: HashMap::new(),
             providers: HashMap::new(),
             test_dir: prepare_test_dir(test_name)?,
+            test_timeout: Duration::from_secs(10),
         })
     }
 
@@ -59,6 +61,11 @@ impl Framework {
             .add_requestor(req_config)?;
 
         Ok(framework)
+    }
+
+    pub fn test_timeout(mut self, timeout: Duration) -> Self {
+        self.test_timeout = timeout;
+        self
     }
 
     pub fn add_provider(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
@@ -141,7 +148,7 @@ impl Framework {
             )
         }
 
-        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(10));
+        let processors_handle = self.spawn_processors(record.clone(), self.test_timeout);
         self.init_for(offers, demands, record.clone()).await;
 
         processors_handle

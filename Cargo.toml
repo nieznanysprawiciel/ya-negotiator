@@ -21,7 +21,7 @@ ya-negotiator-component = { path = "negotiator-component" }
 ya-builtin-negotiators = { path = "builtin-negotiators" }
 ya-negotiator-shared-lib-interface = { path = "interfaces/shared-lib" }
 
-ya-client-model = "0.2"
+ya-client-model = "0.3"
 
 actix = { version = "0.10" }
 actix-rt = "1.1.1"
@@ -45,4 +45,4 @@ ya-negotiators-testing = { path = "testing" }
 dll-negotiator = { path = "examples/dll-negotiator" }
 
 [patch.crates-io]
-ya-client-model = { git = "https://github.com/golemfactory/ya-client.git", rev = "e68bbd90c903c6f74f77fddb80a432d20e4e2b2a"}
+#ya-client-model = { git = "https://github.com/golemfactory/ya-client.git", rev = "a613ac3e13e8f38003efa66a4d11cfcbc8254520"}

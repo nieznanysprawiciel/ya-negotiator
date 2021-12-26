@@ -60,6 +60,8 @@ pub struct Negotiator {
     agreements: ProposalsCollection,
 
     /// Mapping between Proposal Ids and Agreements.
+    /// ProposalCollection stores only ProposalIds, so we must retrieve
+    /// Agreement id somehow.
     proposal_agreement: HashMap<String, String>,
 }
 
@@ -362,23 +364,37 @@ impl StreamHandler<Feedback> for Negotiator {
                         .send(AgreementAction::ApproveAgreement { id: id.clone() })
                         .map_err(|_| anyhow!("Failed to send AcceptAgreement for {}", id))
                 }
-                FeedbackAction::Reject { id, reason, .. } => {
-                    let id = match self.proposal_agreement.get(&id) {
+                FeedbackAction::Reject {
+                    id,
+                    reason,
+                    is_final,
+                } => {
+                    let proposal_id = id.clone();
+                    let agreement_id = match self.proposal_agreement.get(&proposal_id) {
                         Some(id) => id.clone(),
                         None => {
-                            log::warn!("Rejected Proposal [{}] with no matching Agreement.", id);
+                            log::warn!(
+                                "Rejected Proposal [{}] with no matching Agreement.",
+                                proposal_id
+                            );
                             return;
                         }
                     };
 
-                    log::info!("Rejecting Agreement [{}]", id);
+                    log::info!("Rejecting Agreement [{}]", agreement_id);
+
+                    if is_final {
+                        self.proposal_agreement.remove(&proposal_id);
+                    }
 
                     self.agreement_channel
                         .send(AgreementAction::RejectAgreement {
-                            id: id.clone(),
+                            id: agreement_id.clone(),
                             reason: reason.into(),
                         })
-                        .map_err(|_| anyhow!("Failed to send RejectAgreement for [{}]", id))
+                        .map_err(|_| {
+                            anyhow!("Failed to send RejectAgreement for [{}]", agreement_id)
+                        })
                 }
             },
             CollectionType::Proposal => match item.action {

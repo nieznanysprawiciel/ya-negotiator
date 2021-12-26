@@ -1644,6 +1644,7 @@ name = "ya-negotiator-component"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "derive_more",
  "lazy_static",
  "log",
  "log-derive",

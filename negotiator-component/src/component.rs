@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::reason::RejectReason;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
 
@@ -34,15 +35,25 @@ pub enum NegotiationResult {
         proposal: ProposalView,
         score: Score,
     },
-    /// Proposal is not ready to become Agreement, but negotiations
-    /// are in progress.
+    /// Proposal is not ready to become Agreement, because negotiations
+    /// are still in progress. Should be used, when negotiator changed any field
+    /// in his Proposals in relation to our previous Proposal.
     Negotiating {
         proposal: ProposalView,
         score: Score,
     },
     /// Proposal is not acceptable and should be rejected.
     /// Negotiations can't be continued.
-    Reject { reason: Option<Reason> },
+    ///
+    /// If `is_final` flag is set to false, negotiations can be restarted
+    /// by countering Proposal, that we rejected. This can be used in case
+    /// we are not able to accept Proposal now, but we could negotiate further
+    /// in the future.
+    /// `is_final` set to true means, that Proposal will never be acceptable for us.
+    Reject {
+        reason: RejectReason,
+        is_final: bool,
+    },
 }
 
 /// Result of agreement execution.

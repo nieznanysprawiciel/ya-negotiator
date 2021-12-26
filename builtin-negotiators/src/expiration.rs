@@ -3,8 +3,8 @@ use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 
 use ya_agreement_utils::ProposalView;
-use ya_client_model::market::Reason;
 use ya_negotiator_component::component::{NegotiationResult, NegotiatorComponent, Score};
+use ya_negotiator_component::reason::RejectReason;
 
 /// Negotiator that can limit number of running agreements.
 pub struct LimitExpiration {
@@ -58,10 +58,11 @@ impl NegotiatorComponent for LimitExpiration {
                 demand.id
             );
             NegotiationResult::Reject {
-                reason: Some(Reason::new(format!(
+                reason: RejectReason::new(format!(
                     "Proposal expires at: {} which is less than {} or more than {} from now",
                     expiration, self.min_expiration, self.max_expiration
-                ))),
+                )),
+                is_final: true,
             }
         } else {
             NegotiationResult::Ready {

@@ -11,6 +11,7 @@ ya-agreement-utils = { path = "../agreement-utils" }
 ya-client-model = "0.2"
 
 anyhow = "1.0.31"
+derive_more = "0.99"
 lazy_static = "1.4"
 log = "0.4"
 log-derive = "0.4"

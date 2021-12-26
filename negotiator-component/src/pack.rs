@@ -61,8 +61,8 @@ impl NegotiatorComponent for NegotiatorsPack {
                     template = offer;
                     score = new_score;
                 }
-                NegotiationResult::Reject { reason } => {
-                    return Ok(NegotiationResult::Reject { reason })
+                NegotiationResult::Reject { reason, is_final } => {
+                    return Ok(NegotiationResult::Reject { reason, is_final })
                 }
             }
         }

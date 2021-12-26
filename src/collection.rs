@@ -9,7 +9,7 @@ use tokio::sync::mpsc;
 
 use crate::component::ProposalView;
 
-use ya_client_model::market::Reason;
+use ya_negotiator_component::reason::RejectReason;
 
 #[derive(Debug)]
 pub struct ProposalScore {
@@ -50,7 +50,7 @@ pub enum FeedbackAction {
     },
     Reject {
         id: String,
-        reason: Option<Reason>,
+        reason: RejectReason,
         is_final: bool,
     },
 }
@@ -198,7 +198,7 @@ impl ProposalsCollection {
         for proposal in rejected {
             self.send_feedback(FeedbackAction::Reject {
                 id: proposal.their.id.clone(),
-                reason: Some(Reason::new("Node is busy.")),
+                reason: RejectReason::new("Node is busy.").into(),
                 is_final: false,
             })
             .ok();

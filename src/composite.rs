@@ -9,7 +9,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 
 use ya_client_model::market::proposal::State;
-use ya_client_model::market::{NewOffer, Reason};
+use ya_client_model::market::NewOffer;
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
 use crate::negotiators::{
@@ -26,6 +26,7 @@ use crate::collection::{
 
 use ya_agreement_utils::agreement::expand;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
+use ya_negotiator_component::reason::RejectReason;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CompositeNegotiatorConfig {
@@ -110,8 +111,9 @@ impl Handler<ReactToProposal> for Negotiator {
 
     fn handle(&mut self, msg: ReactToProposal, _: &mut Context<Self>) -> Self::Result {
         log::debug!(
-            "Reacting to Proposal [{}]",
-            msg.incoming_proposal.proposal_id
+            "Reacting to Proposal [{}] from [{}]",
+            msg.incoming_proposal.proposal_id,
+            msg.incoming_proposal.issuer_id
         );
 
         let their = ProposalView::try_from(&msg.incoming_proposal)?;
@@ -131,10 +133,10 @@ impl Handler<ReactToProposal> for Negotiator {
             .negotiate_step(&their, template, Score::default())?;
 
         match result {
-            NegotiationResult::Reject { reason } => {
+            NegotiationResult::Reject { reason, is_final } => {
                 self.proposal_channel.send(ProposalAction::RejectProposal {
                     id: their.id.clone(),
-                    reason,
+                    reason: reason.final_flag(is_final).into(),
                 })?;
             }
             NegotiationResult::Ready {
@@ -255,18 +257,20 @@ impl Handler<ReactToAgreement> for Negotiator {
                     &agreement_id,
                 )?;
             }
-            NegotiationResult::Reject { reason } => {
+            NegotiationResult::Reject { reason, is_final } => {
                 self.agreement_channel
                     .send(AgreementAction::RejectAgreement {
                         id: agreement_id,
-                        reason,
+                        reason: reason.final_flag(is_final).into(),
                     })?;
             }
             NegotiationResult::Negotiating { .. } => {
                 self.agreement_channel
                     .send(AgreementAction::RejectAgreement {
                         id: agreement_id,
-                        reason: Some(Reason::new("Negotiations aren't finished.")),
+                        reason: RejectReason::new("Negotiations aren't finished.")
+                            .final_flag(true)
+                            .into(),
                     })?;
             }
         }
@@ -372,7 +376,7 @@ impl StreamHandler<Feedback> for Negotiator {
                     self.agreement_channel
                         .send(AgreementAction::RejectAgreement {
                             id: id.clone(),
-                            reason,
+                            reason: reason.into(),
                         })
                         .map_err(|_| anyhow!("Failed to send RejectAgreement for [{}]", id))
                 }
@@ -402,7 +406,7 @@ impl StreamHandler<Feedback> for Negotiator {
                     self.proposal_channel
                         .send(ProposalAction::RejectProposal {
                             id: id.clone(),
-                            reason,
+                            reason: reason.into(),
                         })
                         .map_err(|_| anyhow!("Failed to send RejectProposal for [{}]", id))
                 }

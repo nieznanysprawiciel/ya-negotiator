@@ -16,24 +16,31 @@ use ya_negotiator_component::component::AgreementEvent;
 #[allow(dead_code)]
 pub enum ProposalAction {
     #[display(fmt = "CounterProposal")]
-    CounterProposal { id: String, proposal: NewProposal },
+    CounterProposal {
+        id: String,
+        subscription_id: String,
+        proposal: NewProposal,
+    },
     #[display(fmt = "AcceptProposal")]
-    AcceptProposal { id: String },
+    AcceptProposal { id: String, subscription_id: String },
     #[display(
         fmt = "RejectProposal [{}]{}",
         id,
         "reason.as_ref().map(|r| format!(\" (reason: {})\", r)).unwrap_or(\"\".into())"
     )]
-    RejectProposal { id: String, reason: Option<Reason> },
+    RejectProposal {
+        subscription_id: String,
+        id: String,
+        reason: Option<Reason>,
+    },
 }
 
 /// Response for requestor agreements.
 #[derive(Debug, Clone, Display, Serialize, Deserialize)]
 #[allow(dead_code)]
 pub enum AgreementAction {
-    ApproveAgreement {
-        id: String,
-    },
+    #[display(fmt = "ApproveAgreement")]
+    ApproveAgreement { id: String, subscription_id: String },
     #[display(
         fmt = "RejectAgreement [{}]{}",
         id,
@@ -41,6 +48,7 @@ pub enum AgreementAction {
     )]
     RejectAgreement {
         id: String,
+        subscription_id: String,
         reason: Option<Reason>,
     },
 }
@@ -62,6 +70,7 @@ pub struct CreateOffer {
 #[derive(Message)]
 #[rtype(result = "Result<()>")]
 pub struct ReactToProposal {
+    pub subscription_id: String,
     /// It is new proposal that we got from other party.
     pub incoming_proposal: Proposal,
     /// It is always our proposal that we sent last time.
@@ -73,6 +82,7 @@ pub struct ReactToProposal {
 #[derive(Message)]
 #[rtype(result = "Result<()>")]
 pub struct ReactToAgreement {
+    pub subscription_id: String,
     pub agreement: AgreementView,
 }
 
@@ -135,20 +145,27 @@ impl NegotiatorAddr {
 
     pub async fn react_to_proposal(
         &self,
+        subscription_id: &str,
         incoming_proposal: &Proposal,
         our_proposal: &Proposal,
     ) -> Result<()> {
         self.0
             .send(ReactToProposal {
+                subscription_id: subscription_id.to_string(),
                 incoming_proposal: incoming_proposal.clone(),
                 our_prev_proposal: our_proposal.clone(),
             })
             .await?
     }
 
-    pub async fn react_to_agreement(&self, agreement_view: &AgreementView) -> Result<()> {
+    pub async fn react_to_agreement(
+        &self,
+        subscription_id: &str,
+        agreement_view: &AgreementView,
+    ) -> Result<()> {
         self.0
             .send(ReactToAgreement {
+                subscription_id: subscription_id.to_string(),
                 agreement: agreement_view.clone(),
             })
             .await?
@@ -223,6 +240,25 @@ impl NegotiatorAddr {
     }
 }
 
+impl ProposalAction {
+    pub fn id(&self) -> String {
+        match &self {
+            ProposalAction::CounterProposal { id, .. } => id.clone(),
+            ProposalAction::AcceptProposal { id, .. } => id.clone(),
+            ProposalAction::RejectProposal { id, .. } => id.clone(),
+        }
+    }
+}
+
+impl AgreementAction {
+    pub fn id(&self) -> String {
+        match &self {
+            AgreementAction::ApproveAgreement { id, .. } => id.clone(),
+            AgreementAction::RejectAgreement { id, .. } => id.clone(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -231,10 +267,12 @@ mod tests {
     fn test_proposal_response_display() {
         let reason = ProposalAction::RejectProposal {
             id: "".to_string(),
+            subscription_id: "".to_string(),
             reason: Some("zima".into()),
         };
         let no_reason = ProposalAction::RejectProposal {
             id: "".to_string(),
+            subscription_id: "".to_string(),
             reason: None,
         };
 
@@ -246,10 +284,12 @@ mod tests {
     fn test_agreement_response_display() {
         let reason = AgreementAction::RejectAgreement {
             id: "".to_string(),
+            subscription_id: "".to_string(),
             reason: Some("lato".into()),
         };
         let no_reason = AgreementAction::RejectAgreement {
             id: "".to_string(),
+            subscription_id: "".to_string(),
             reason: None,
         };
 

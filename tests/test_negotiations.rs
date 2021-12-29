@@ -29,7 +29,7 @@ fn example_config() -> NegotiatorsConfig {
 
     NegotiatorsConfig {
         negotiators: vec![expiration_conf, limit_conf],
-        composite: CompositeNegotiatorConfig::default_test()
+        composite: CompositeNegotiatorConfig::default_test(),
     }
 }
 
@@ -94,7 +94,7 @@ async fn test_negotiation() {
     let proposal = proposal_from_demand(&demand);
 
     negotiator
-        .react_to_proposal(&proposal, &offer)
+        .react_to_proposal("", &proposal, &offer)
         .await
         .unwrap();
 
@@ -108,7 +108,7 @@ async fn test_negotiation() {
     let proposal = proposal_from_demand(&demand);
 
     negotiator
-        .react_to_proposal(&proposal, &offer)
+        .react_to_proposal("", &proposal, &offer)
         .await
         .unwrap();
 

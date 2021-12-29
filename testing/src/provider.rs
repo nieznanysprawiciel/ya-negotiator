@@ -221,11 +221,13 @@ pub async fn provider_proposals_processor(
 
     while let Some((node_id, Ok(action))) = p_receivers.next().await {
         match action {
-            ProposalAction::AcceptProposal { id } => reactions.accept_proposal(node_id, id).await,
-            ProposalAction::CounterProposal { id, proposal } => {
+            ProposalAction::AcceptProposal { id, .. } => {
+                reactions.accept_proposal(node_id, id).await
+            }
+            ProposalAction::CounterProposal { id, proposal, .. } => {
                 reactions.counter_proposal(node_id, id, proposal).await
             }
-            ProposalAction::RejectProposal { id, reason } => {
+            ProposalAction::RejectProposal { id, reason, .. } => {
                 reactions.reject_proposal(node_id, id, reason).await
             }
         }
@@ -260,10 +262,10 @@ pub async fn provider_agreements_processor(
 
     while let Some((node_id, Ok(action))) = p_receivers.next().await {
         match action {
-            AgreementAction::ApproveAgreement { id } => {
+            AgreementAction::ApproveAgreement { id, .. } => {
                 reactions.approve_agreement(node_id, id).await
             }
-            AgreementAction::RejectAgreement { id, reason } => {
+            AgreementAction::RejectAgreement { id, reason, .. } => {
                 reactions.reject_agreement(node_id, id, reason).await
             }
         }

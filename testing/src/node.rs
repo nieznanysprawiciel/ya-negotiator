@@ -104,12 +104,12 @@ impl Node {
         our_prev_proposal: &Proposal,
     ) -> Result<()> {
         self.negotiator
-            .react_to_proposal(incoming_proposal, our_prev_proposal)
+            .react_to_proposal("", incoming_proposal, our_prev_proposal)
             .await
     }
 
     pub async fn react_to_agreement(&self, agreement_view: &AgreementView) -> Result<()> {
-        self.negotiator.react_to_agreement(agreement_view).await
+        self.negotiator.react_to_agreement("", agreement_view).await
     }
 
     pub async fn agreement_signed(&self, agreement_view: &AgreementView) -> Result<()> {

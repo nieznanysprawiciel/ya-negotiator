@@ -63,6 +63,10 @@ pub struct Negotiator {
     /// ProposalCollection stores only ProposalIds, so we must retrieve
     /// Agreement id somehow.
     proposal_agreement: HashMap<String, String>,
+    /// Mapping between Proposals/Agreements and related subscription Ids.
+    /// Note: In theory it is possible to have conflict between Agreement and Proposal
+    /// Ids, but in practise probability is very low.
+    subscriptions: HashMap<String, String>,
 }
 
 pub struct NegotiatorCallbacks {
@@ -85,6 +89,7 @@ impl Negotiator {
             proposals: ProposalsCollection::new(CollectionType::Proposal, config.proposals),
             agreements: ProposalsCollection::new(CollectionType::Agreement, config.agreements),
             proposal_agreement: Default::default(),
+            subscriptions: Default::default(),
         };
 
         let callbacks = NegotiatorCallbacks {
@@ -118,6 +123,11 @@ impl Handler<ReactToProposal> for Negotiator {
             msg.incoming_proposal.issuer_id
         );
 
+        self.subscriptions.insert(
+            msg.incoming_proposal.proposal_id.clone(),
+            msg.subscription_id.clone(),
+        );
+
         let their = ProposalView::try_from(&msg.incoming_proposal)?;
         let template = ProposalView {
             content: OfferTemplate {
@@ -137,6 +147,7 @@ impl Handler<ReactToProposal> for Negotiator {
         match result {
             NegotiationResult::Reject { reason, is_final } => {
                 self.proposal_channel.send(ProposalAction::RejectProposal {
+                    subscription_id: msg.subscription_id,
                     id: their.id.clone(),
                     reason: reason.final_flag(is_final).into(),
                 })?;
@@ -150,6 +161,7 @@ impl Handler<ReactToProposal> for Negotiator {
                     // ProposalsCollection should store only fully negotiated Proposals.
                     self.proposal_channel
                         .send(ProposalAction::CounterProposal {
+                            subscription_id: msg.subscription_id,
                             id: their.id.clone(),
                             proposal: our.into(),
                         })?;
@@ -173,6 +185,7 @@ impl Handler<ReactToProposal> for Negotiator {
             NegotiationResult::Negotiating { proposal: our, .. } => {
                 self.proposal_channel
                     .send(ProposalAction::CounterProposal {
+                        subscription_id: msg.subscription_id,
                         id: their.id.clone(),
                         proposal: our.into(),
                     })?;
@@ -243,6 +256,9 @@ impl Handler<ReactToAgreement> for Negotiator {
         self.proposal_agreement
             .insert(our.id.clone(), agreement_id.clone());
 
+        self.subscriptions
+            .insert(msg.agreement.id.clone(), msg.subscription_id.clone());
+
         // We expect that all `NegotiatorComponents` should return ready state.
         // Otherwise we must reject Agreement proposals, because negotiations weren't finished.
         match self
@@ -263,6 +279,7 @@ impl Handler<ReactToAgreement> for Negotiator {
                 self.agreement_channel
                     .send(AgreementAction::RejectAgreement {
                         id: agreement_id,
+                        subscription_id: msg.subscription_id,
                         reason: reason.final_flag(is_final).into(),
                     })?;
             }
@@ -270,6 +287,7 @@ impl Handler<ReactToAgreement> for Negotiator {
                 self.agreement_channel
                     .send(AgreementAction::RejectAgreement {
                         id: agreement_id,
+                        subscription_id: msg.subscription_id,
                         reason: RejectReason::new("Negotiations aren't finished.")
                             .final_flag(true)
                             .into(),
@@ -350,18 +368,30 @@ impl StreamHandler<Feedback> for Negotiator {
                     self.agreements.decide()
                 }
                 FeedbackAction::Accept { id } => {
-                    let id = match self.proposal_agreement.get(&id) {
+                    let proposal_id = id.clone();
+                    let id = match self.proposal_agreement.get(&proposal_id) {
                         Some(id) => id.clone(),
                         None => {
-                            log::warn!("Accepted Proposal [{}] with no matching Agreement.", id);
+                            log::warn!(
+                                "Accepted Proposal [{}] with no matching Agreement.",
+                                proposal_id
+                            );
                             return;
                         }
+                    };
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
                     };
 
                     log::info!("Accepting Agreement [{}]", id);
 
+                    self.proposal_agreement.remove(&proposal_id);
                     self.agreement_channel
-                        .send(AgreementAction::ApproveAgreement { id: id.clone() })
+                        .send(AgreementAction::ApproveAgreement {
+                            id: id.clone(),
+                            subscription_id,
+                        })
                         .map_err(|_| anyhow!("Failed to send AcceptAgreement for {}", id))
                 }
                 FeedbackAction::Reject {
@@ -381,6 +411,11 @@ impl StreamHandler<Feedback> for Negotiator {
                         }
                     };
 
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
+                    };
+
                     log::info!("Rejecting Agreement [{}]", agreement_id);
 
                     if is_final {
@@ -390,6 +425,7 @@ impl StreamHandler<Feedback> for Negotiator {
                     self.agreement_channel
                         .send(AgreementAction::RejectAgreement {
                             id: agreement_id.clone(),
+                            subscription_id,
                             reason: reason.into(),
                         })
                         .map_err(|_| {
@@ -412,15 +448,29 @@ impl StreamHandler<Feedback> for Negotiator {
                 FeedbackAction::Accept { id } => {
                     log::info!("Accepting Proposal [{}]", id);
 
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
+                    };
+
                     self.proposal_channel
-                        .send(ProposalAction::AcceptProposal { id: id.clone() })
+                        .send(ProposalAction::AcceptProposal {
+                            id: id.clone(),
+                            subscription_id,
+                        })
                         .map_err(|_| anyhow!("Failed to send AcceptProposal for [{}]", id))
                 }
                 FeedbackAction::Reject { id, reason, .. } => {
                     log::info!("Rejecting Proposal {}", id);
 
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
+                    };
+
                     self.proposal_channel
                         .send(ProposalAction::RejectProposal {
+                            subscription_id,
                             id: id.clone(),
                             reason: reason.into(),
                         })

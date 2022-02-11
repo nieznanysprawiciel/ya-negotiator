@@ -60,18 +60,20 @@ pub enum NegotiationResult {
 #[non_exhaustive]
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum AgreementResult {
-    /// Failed to approve agreement. (Agreement even wasn't created).
-    /// It can happen for Provider in case call to `approve_agreement` will fail.
-    /// For Requestor it happens, when Agreement gets rejected or it's creation/sending fails.
-    /// TODO: Maybe we should distinguish these cases with enum??
-    /// TODO: We should pass rejection Reason.
-    ApprovalFailed,
-    /// Agreement was finished with success after first Activity.
-    ClosedByProvider,
-    /// Agreement was finished with success by Requestor.
-    ClosedByRequestor,
-    /// Agreement was broken by one party. It indicates non successful end of Agreement.
-    Broken { reason: Option<Reason> },
+    // /// Failed to approve agreement. (Agreement even wasn't created).
+    // /// It can happen for Provider in case call to `approve_agreement` will fail.
+    // /// For Requestor it happens, when Agreement gets rejected or it's creation/sending fails.
+    // /// TODO: Maybe we should distinguish these cases with enum??
+    // /// TODO: We should pass rejection Reason.
+    // ApprovalFailed,
+    /// Agreement was finished with success by us.
+    ClosedByUs,
+    /// Agreement was finished with success by other party.
+    ClosedByThem,
+    /// Agreement was broken by us. It indicates not successful end of Agreement.
+    BrokenByUs { reason: Option<Reason> },
+    /// Agreement was broken by one party. It indicates not successful end of Agreement.
+    BrokenByThem { reason: Option<Reason> },
 }
 
 /// Notification about things happening with Agreement after it's termination.

@@ -41,16 +41,19 @@ pub struct NegotiatorsConfig {
 pub fn create_negotiator(
     config: NegotiatorsConfig,
     working_dir: PathBuf,
+    plugins_dir: PathBuf,
 ) -> anyhow::Result<(Arc<NegotiatorAddr>, NegotiatorCallbacks)> {
     let mut components = NegotiatorsPack::new();
     for config in config.negotiators.into_iter() {
         let name = config.name;
         let working_dir = working_dir.join(&name);
 
+        log::info!("Creating negotiator: {}", name);
+
         let negotiator = match config.load_mode {
             LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,
             LoadMode::SharedLibrary { path } => {
-                create_shared_lib(&path, &name, config.params, working_dir)?
+                create_shared_lib(&plugins_dir.join(path), &name, config.params, working_dir)?
             }
             LoadMode::StaticLib { library } => create_static_negotiator(
                 &format!("{}::{}", &library, &name),

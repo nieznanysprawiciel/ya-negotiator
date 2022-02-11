@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
+use std::collections::HashMap;
 
 use crate::agreement::flatten;
 use crate::Error;
-use std::collections::HashMap;
 
 /// TODO: Could we use Constraints instead of String?? This would require parsing string.
 ///  It is complicated, but we could use code from resolver to do this.

@@ -58,6 +58,7 @@ pub enum FeedbackAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionConfig {
     /// Time period before making decision, which Proposals to choose.
+    #[serde(with = "humantime_serde")]
     pub collect_period: Option<Duration>,
     /// Number of Proposals to collect, after which best of them will be accepted.
     pub collect_amount: Option<usize>,

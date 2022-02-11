@@ -1704,6 +1704,7 @@ dependencies = [
  "derive_more",
  "dll-negotiator",
  "futures",
+ "humantime-serde",
  "log",
  "serde",
  "serde_json",

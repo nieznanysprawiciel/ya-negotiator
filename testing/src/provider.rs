@@ -13,6 +13,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::stream::{StreamExt, StreamMap};
 
+/// Receives Proposal and Agreement reactions from negotiators and processes them.
+/// This simulates Provider Agent expected behavior.
 pub struct ProviderReactions {
     pub providers: HashMap<NodeId, Arc<Node>>,
     pub requestors: HashMap<NodeId, Arc<Node>>,
@@ -25,6 +27,12 @@ impl ProviderReactions {
         node_id: NodeId,
         proposal_id: String,
     ) -> anyhow::Result<()> {
+        log::info!(
+            "Processing Provider [{}] accept_proposal for Proposal [{}]",
+            node_id,
+            proposal_id
+        );
+
         let record = self.record.clone();
         let provider = self.get_provider(&node_id)?;
 
@@ -35,6 +43,13 @@ impl ProviderReactions {
             record.get_proposal(&req_proposal.prev_proposal_id.clone().unwrap())?;
 
         let prov_proposal = provider.recounter_proposal(&proposal_id, &prev_prov_proposal);
+
+        log::info!(
+            "Provider [{}] accepted [{}] and responded with the same Proposal with new id [{}].",
+            node_id,
+            proposal_id,
+            prov_proposal.proposal_id
+        );
 
         // Register event.
         record.accept(prov_proposal.clone(), req_proposal.issuer_id);
@@ -54,6 +69,12 @@ impl ProviderReactions {
         proposal_id: String,
         reason: Option<Reason>,
     ) -> anyhow::Result<()> {
+        log::info!(
+            "Processing Provider [{}] reject_proposal for Proposal {}",
+            node_id,
+            proposal_id
+        );
+
         let record = self.record.clone();
         let req_proposal = record.get_proposal(&proposal_id)?;
 
@@ -69,12 +90,25 @@ impl ProviderReactions {
         proposal_id: String,
         proposal: NewProposal,
     ) -> anyhow::Result<()> {
+        log::info!(
+            "Processing Provider [{}] counter_proposal for Proposal {}",
+            node_id,
+            proposal_id
+        );
+
         let record = self.record.clone();
         let provider = self.get_provider(&node_id)?;
         let req_proposal = record.get_proposal(&proposal_id)?;
         let requestor = self.get_requestor(&req_proposal.issuer_id)?;
 
-        let proposal = provider.into_proposal(proposal, State::Draft);
+        let proposal = provider.into_proposal(proposal, State::Draft, Some(proposal_id.clone()));
+
+        log::info!(
+            "Provider [{}] responded to [{}] with counter Proposal [{}]",
+            node_id,
+            proposal_id,
+            proposal.proposal_id
+        );
 
         // Register event.
         record.counter(proposal.clone(), req_proposal.issuer_id);
@@ -90,6 +124,12 @@ impl ProviderReactions {
         node_id: NodeId,
         agreement_id: String,
     ) -> anyhow::Result<()> {
+        log::info!(
+            "Processing Provider [{}] approve_agreement for Agreement {}",
+            node_id,
+            agreement_id
+        );
+
         let record = self.record.clone();
 
         let agreement = record.get_agreement(&agreement_id)?;
@@ -117,6 +157,11 @@ impl ProviderReactions {
         agreement_id: String,
         reason: Option<Reason>,
     ) -> anyhow::Result<()> {
+        log::info!(
+            "Processing Provider [{}] reject_agreement for Agreement {}",
+            node_id,
+            agreement_id
+        );
         let record = self.record.clone();
         let agreement = record.get_agreement(&agreement_id)?;
         let requestor = self.get_requestor(&agreement.requestor_id()?)?;
@@ -147,7 +192,7 @@ impl ProviderReactions {
         self.requestors
             .get(id)
             .cloned()
-            .ok_or(NegotiatorError::ProviderNotFound {
+            .ok_or(NegotiatorError::RequestorNotFound {
                 node_id: id.clone(),
                 trace: format!("{:?}", Backtrace::new()),
             })
@@ -176,11 +221,13 @@ pub async fn provider_proposals_processor(
 
     while let Some((node_id, Ok(action))) = p_receivers.next().await {
         match action {
-            ProposalAction::AcceptProposal { id } => reactions.accept_proposal(node_id, id).await,
-            ProposalAction::CounterProposal { id, proposal } => {
+            ProposalAction::AcceptProposal { id, .. } => {
+                reactions.accept_proposal(node_id, id).await
+            }
+            ProposalAction::CounterProposal { id, proposal, .. } => {
                 reactions.counter_proposal(node_id, id, proposal).await
             }
-            ProposalAction::RejectProposal { id, reason } => {
+            ProposalAction::RejectProposal { id, reason, .. } => {
                 reactions.reject_proposal(node_id, id, reason).await
             }
         }
@@ -215,10 +262,10 @@ pub async fn provider_agreements_processor(
 
     while let Some((node_id, Ok(action))) = p_receivers.next().await {
         match action {
-            AgreementAction::ApproveAgreement { id } => {
+            AgreementAction::ApproveAgreement { id, .. } => {
                 reactions.approve_agreement(node_id, id).await
             }
-            AgreementAction::RejectAgreement { id, reason } => {
+            AgreementAction::RejectAgreement { id, reason, .. } => {
                 reactions.reject_agreement(node_id, id, reason).await
             }
         }

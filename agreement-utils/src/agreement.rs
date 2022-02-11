@@ -1,15 +1,16 @@
 use ya_client_model::market::Agreement;
+use ya_client_model::NodeId;
 
 pub use crate::proposal::ProposalView;
 pub use crate::template::OfferTemplate;
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::fmt::{Error as FormatError, Formatter};
 use std::path::PathBuf;
-use ya_client_model::NodeId;
 
 pub const PROPERTY_TAG: &str = "@tag";
 const DEFAULT_FORMAT: &str = "json";
@@ -65,6 +66,10 @@ impl AgreementView {
 
     pub fn provider_id(&self) -> Result<NodeId, Error> {
         self.pointer_typed("/offer/providerId")
+    }
+
+    pub fn creation_timestamp(&self) -> Result<DateTime<Utc>, Error> {
+        self.pointer_typed("/timestamp")
     }
 }
 

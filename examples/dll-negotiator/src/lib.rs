@@ -1,9 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::ya_negotiator_component::reason::RejectReason;
 use ya_negotiator_shared_lib_interface::plugin::{
-    transparent_impl, NegotiationResult, NegotiatorComponent, NegotiatorConstructor, ProposalView,
-    Reason, Score,
+    NegotiationResult, NegotiatorComponent, NegotiatorConstructor, ProposalView, Score,
 };
 use ya_negotiator_shared_lib_interface::*;
 
@@ -40,7 +40,8 @@ impl NegotiatorComponent for FilterNodes {
             Ok(node_name) => {
                 if self.names.contains(&node_name) {
                     NegotiationResult::Reject {
-                        reason: Some(Reason::new("Node on rejection list.")),
+                        reason: RejectReason::new("Node on rejection list."),
+                        is_final: true,
                     }
                 } else {
                     NegotiationResult::Ready {
@@ -50,17 +51,11 @@ impl NegotiatorComponent for FilterNodes {
                 }
             }
             Err(_) => NegotiationResult::Reject {
-                reason: Some(Reason::new("Unnamed Node")),
+                reason: RejectReason::new("Unnamed Node"),
+                is_final: true,
             },
         })
     }
-
-    transparent_impl!(on_proposal_rejected);
-    transparent_impl!(on_post_terminate_event);
-    transparent_impl!(fill_template);
-    transparent_impl!(on_agreement_terminated);
-    transparent_impl!(on_agreement_approved);
-    transparent_impl!(control_event);
 }
 
 register_negotiators!(FilterNodes);

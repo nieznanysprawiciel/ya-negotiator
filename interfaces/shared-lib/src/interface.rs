@@ -90,11 +90,7 @@ pub trait SharedNegotiatorAPI {
 
     fn on_proposal_rejected(&mut self, proposal_id: &RStr) -> RResult<(), RString>;
 
-    fn on_post_terminate_event(
-        &mut self,
-        agreement_id: &RStr,
-        event: &RStr,
-    ) -> RResult<(), RString>;
+    fn on_agreement_event(&mut self, agreement_id: &RStr, event: &RStr) -> RResult<(), RString>;
 
     fn control_event(&mut self, component: &RStr, params: &RStr) -> RResult<RString, RString>;
 }

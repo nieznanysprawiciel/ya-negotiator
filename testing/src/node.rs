@@ -84,6 +84,10 @@ impl Node {
         self.proposal_sender.subscribe()
     }
 
+    pub async fn request_agreements(&self, count: usize) -> Result<()> {
+        Ok(self.negotiator.request_agreements(count).await?)
+    }
+
     pub async fn create_offer(&self, template: &OfferTemplate) -> Result<Proposal> {
         let offer = self.negotiator.create_offer(&template).await?;
         let state = match self.node_type {
@@ -91,7 +95,7 @@ impl Node {
             NodeType::Requestor => State::Draft,
         };
 
-        Ok(self.into_proposal(offer, state))
+        Ok(self.into_proposal(offer, state, None))
     }
 
     pub async fn react_to_proposal(
@@ -100,12 +104,12 @@ impl Node {
         our_prev_proposal: &Proposal,
     ) -> Result<()> {
         self.negotiator
-            .react_to_proposal(incoming_proposal, our_prev_proposal)
+            .react_to_proposal("", incoming_proposal, our_prev_proposal)
             .await
     }
 
     pub async fn react_to_agreement(&self, agreement_view: &AgreementView) -> Result<()> {
-        self.negotiator.react_to_agreement(agreement_view).await
+        self.negotiator.react_to_agreement("", agreement_view).await
     }
 
     pub async fn agreement_signed(&self, agreement_view: &AgreementView) -> Result<()> {
@@ -122,7 +126,12 @@ impl Node {
             .await
     }
 
-    pub fn into_proposal(&self, offer: DemandOfferBase, state: State) -> Proposal {
+    pub fn into_proposal(
+        &self,
+        offer: DemandOfferBase,
+        state: State,
+        prev: Option<String>,
+    ) -> Proposal {
         Proposal {
             properties: offer.properties,
             constraints: offer.constraints,
@@ -130,7 +139,7 @@ impl Node {
             issuer_id: self.node_id,
             state,
             timestamp: Utc::now(),
-            prev_proposal_id: None,
+            prev_proposal_id: prev,
         }
     }
 

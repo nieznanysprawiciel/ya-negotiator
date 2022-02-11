@@ -29,6 +29,7 @@ fn example_config() -> NegotiatorsConfig {
 
     NegotiatorsConfig {
         negotiators: vec![expiration_conf, limit_conf],
+        composite: CompositeNegotiatorConfig::default_test(),
     }
 }
 
@@ -72,6 +73,9 @@ fn proposal_from_demand(demand: &NewDemand) -> Proposal {
     }
 }
 
+/// This is example of test, that checks Negotiator responses directly.
+/// It ignores simulating Provider/Requestor Proposals exchange and checks,
+/// if for given Proposal, Negotiator behaves correctly.
 #[actix_rt::test]
 async fn test_negotiation() {
     let config = example_config();
@@ -90,7 +94,7 @@ async fn test_negotiation() {
     let proposal = proposal_from_demand(&demand);
 
     negotiator
-        .react_to_proposal(&proposal, &offer)
+        .react_to_proposal("", &proposal, &offer)
         .await
         .unwrap();
 
@@ -104,7 +108,7 @@ async fn test_negotiation() {
     let proposal = proposal_from_demand(&demand);
 
     negotiator
-        .react_to_proposal(&proposal, &offer)
+        .react_to_proposal("", &proposal, &offer)
         .await
         .unwrap();
 

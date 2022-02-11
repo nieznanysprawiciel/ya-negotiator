@@ -1,9 +1,11 @@
-use ya_client_model::market::Proposal;
+use ya_client_model::market::proposal::State;
+use ya_client_model::market::{NewProposal, Proposal};
 use ya_client_model::NodeId;
 
-use crate::agreement::{expand, try_from_path, TypedPointer};
+use crate::agreement::{expand, flatten, try_from_path, TypedPointer};
 use crate::{Error, OfferTemplate};
 
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -15,6 +17,8 @@ pub struct ProposalView {
     pub content: OfferTemplate,
     pub id: String,
     pub issuer: NodeId,
+    pub state: State,
+    pub timestamp: DateTime<Utc>,
 }
 
 impl ProposalView {
@@ -59,7 +63,28 @@ impl TryFrom<Value> for ProposalView {
                 .as_typed(Value::as_str)?
                 .parse()
                 .map_err(|e| Error::InvalidValue(format!("Can't parse NodeId. {}", e)))?,
+            state: serde_json::from_value(
+                value
+                    .pointer("/state")
+                    .cloned()
+                    .ok_or(Error::NoKey(format!("state")))?,
+            )
+            .map_err(|e| Error::InvalidValue(format!("Can't deserialize State. {}", e)))?,
+            timestamp: value
+                .pointer("/timestamp")
+                .as_typed(Value::as_str)?
+                .parse()
+                .map_err(|e| Error::InvalidValue(format!("Can't parse timestamp. {}", e)))?,
         })
+    }
+}
+
+impl From<ProposalView> for NewProposal {
+    fn from(proposal: ProposalView) -> Self {
+        NewProposal {
+            properties: serde_json::Value::Object(flatten(proposal.content.properties)),
+            constraints: proposal.content.constraints,
+        }
     }
 }
 

@@ -1,21 +1,38 @@
-use actix::{Actor, Context, Handler};
+use actix::{Actor, Context, Handler, StreamHandler};
 use anyhow::anyhow;
+use futures::stream::select;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use std::collections::HashMap;
 use std::convert::TryFrom;
+use std::time::Duration;
 use tokio::sync::mpsc;
 
-use ya_client_model::market::{NewOffer, NewProposal, Reason};
+use ya_client_model::market::proposal::State;
+use ya_client_model::market::NewOffer;
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
 use crate::negotiators::{
     AgreementAction, AgreementSigned, ControlEvent, PostAgreementEvent, ProposalAction,
-    ProposalRejected,
+    ProposalRejected, RequestAgreements,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
-use crate::NegotiatorsPack;
+use crate::{NegotiatorsPack, ProposalsCollection};
 
-use ya_agreement_utils::agreement::{expand, flatten};
+use crate::collection::{
+    CollectionConfig, CollectionType, DecideGoal, DecideReason, Feedback, FeedbackAction,
+    ProposalScore,
+};
+
+use ya_agreement_utils::agreement::expand;
 use ya_agreement_utils::{AgreementView, OfferTemplate};
+use ya_negotiator_component::reason::RejectReason;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct CompositeNegotiatorConfig {
+    pub proposals: CollectionConfig,
+    pub agreements: CollectionConfig,
+}
 
 /// Actor implementing Negotiation logic.
 ///
@@ -38,6 +55,18 @@ pub struct Negotiator {
 
     proposal_channel: mpsc::UnboundedSender<ProposalAction>,
     agreement_channel: mpsc::UnboundedSender<AgreementAction>,
+
+    proposals: ProposalsCollection,
+    agreements: ProposalsCollection,
+
+    /// Mapping between Proposal Ids and Agreements.
+    /// ProposalCollection stores only ProposalIds, so we must retrieve
+    /// Agreement id somehow.
+    proposal_agreement: HashMap<String, String>,
+    /// Mapping between Proposals/Agreements and related subscription Ids.
+    /// Note: In theory it is possible to have conflict between Agreement and Proposal
+    /// Ids, but in practise probability is very low.
+    subscriptions: HashMap<String, String>,
 }
 
 pub struct NegotiatorCallbacks {
@@ -46,14 +75,21 @@ pub struct NegotiatorCallbacks {
 }
 
 impl Negotiator {
-    pub fn new(components: NegotiatorsPack) -> (Negotiator, NegotiatorCallbacks) {
+    pub fn new(
+        components: NegotiatorsPack,
+        config: CompositeNegotiatorConfig,
+    ) -> (Negotiator, NegotiatorCallbacks) {
         let (proposal_sender, proposal_receiver) = mpsc::unbounded_channel();
         let (agreement_sender, agreement_receiver) = mpsc::unbounded_channel();
 
         let negotiator = Negotiator {
             components,
-            proposal_channel: proposal_sender,
+            proposal_channel: proposal_sender.clone(),
             agreement_channel: agreement_sender,
+            proposals: ProposalsCollection::new(CollectionType::Proposal, config.proposals),
+            agreements: ProposalsCollection::new(CollectionType::Agreement, config.agreements),
+            proposal_agreement: Default::default(),
+            subscriptions: Default::default(),
         };
 
         let callbacks = NegotiatorCallbacks {
@@ -81,7 +117,18 @@ impl Handler<ReactToProposal> for Negotiator {
     type Result = anyhow::Result<()>;
 
     fn handle(&mut self, msg: ReactToProposal, _: &mut Context<Self>) -> Self::Result {
-        let proposal = ProposalView::try_from(&msg.incoming_proposal)?;
+        log::debug!(
+            "Reacting to Proposal [{}] from [{}]",
+            msg.incoming_proposal.proposal_id,
+            msg.incoming_proposal.issuer_id
+        );
+
+        self.subscriptions.insert(
+            msg.incoming_proposal.proposal_id.clone(),
+            msg.subscription_id.clone(),
+        );
+
+        let their = ProposalView::try_from(&msg.incoming_proposal)?;
         let template = ProposalView {
             content: OfferTemplate {
                 properties: expand(msg.our_prev_proposal.properties),
@@ -89,34 +136,58 @@ impl Handler<ReactToProposal> for Negotiator {
             },
             id: msg.our_prev_proposal.proposal_id,
             issuer: msg.our_prev_proposal.issuer_id,
+            state: msg.our_prev_proposal.state,
+            timestamp: msg.our_prev_proposal.timestamp,
         };
 
         let result = self
             .components
-            .negotiate_step(&proposal, template, Score::default())?;
+            .negotiate_step(&their, template, Score::default())?;
+
         match result {
-            NegotiationResult::Reject { reason } => {
+            NegotiationResult::Reject { reason, is_final } => {
                 self.proposal_channel.send(ProposalAction::RejectProposal {
-                    id: proposal.id.clone(),
-                    reason,
+                    subscription_id: msg.subscription_id,
+                    id: their.id.clone(),
+                    reason: reason.final_flag(is_final).into(),
                 })?;
             }
-            NegotiationResult::Ready { .. } => {
-                self.proposal_channel.send(ProposalAction::AcceptProposal {
-                    id: proposal.id.clone(),
-                })?;
-            }
-            NegotiationResult::Negotiating {
-                proposal: template, ..
-            } => {
-                let offer = NewProposal {
-                    properties: serde_json::Value::Object(flatten(template.content.properties)),
-                    constraints: template.content.constraints,
-                };
+            NegotiationResult::Ready {
+                proposal: our,
+                score,
+            } => match their.state {
+                State::Initial => {
+                    // We must counter Initial Proposal even, if it is ready to promote to Agreement.
+                    // ProposalsCollection should store only fully negotiated Proposals.
+                    self.proposal_channel
+                        .send(ProposalAction::CounterProposal {
+                            subscription_id: msg.subscription_id,
+                            id: their.id.clone(),
+                            proposal: our.into(),
+                        })?;
+                }
+                State::Draft => {
+                    let id = their.id.clone();
+                    self.proposals.new_scored(
+                        ProposalScore {
+                            their,
+                            our,
+                            score: score.pointer_typed("/final-score").unwrap_or(0.0),
+                        },
+                        &id,
+                    )?;
+                }
+                _ => {
+                    log::warn!("Invalid Proposal [{}] state {:?}", their.id, their.state)
+                }
+            },
+
+            NegotiationResult::Negotiating { proposal: our, .. } => {
                 self.proposal_channel
                     .send(ProposalAction::CounterProposal {
-                        id: proposal.id.clone(),
-                        proposal: offer,
+                        subscription_id: msg.subscription_id,
+                        id: their.id.clone(),
+                        proposal: our.into(),
                     })?;
             }
         }
@@ -149,6 +220,8 @@ pub fn to_proposal_views(
         },
         id: offer_id,
         issuer: agreement.pointer_typed("/offer/providerId")?,
+        state: State::Accepted,
+        timestamp: agreement.creation_timestamp()?,
     };
 
     let demand_proposal = ProposalView {
@@ -158,6 +231,8 @@ pub fn to_proposal_views(
         },
         id: demand_id,
         issuer: agreement.pointer_typed("/demand/requestorId")?,
+        state: State::Accepted,
+        timestamp: agreement.creation_timestamp()?,
     };
     Ok((demand_proposal, offer_proposal))
 }
@@ -166,37 +241,56 @@ impl Handler<ReactToAgreement> for Negotiator {
     type Result = anyhow::Result<()>;
 
     fn handle(&mut self, msg: ReactToAgreement, _: &mut Context<Self>) -> Self::Result {
+        log::debug!("Reacting to Agreement [{}]", msg.agreement.id);
+
         let agreement_id = msg.agreement.id.clone();
-        let (demand_proposal, offer_proposal) =
-            to_proposal_views(msg.agreement.clone()).map_err(|e| {
-                anyhow!(
-                    "Negotiator failed to extract Proposals from Agreement. {}",
-                    e
-                )
-            })?;
+        let (their, our) = to_proposal_views(msg.agreement.clone()).map_err(|e| {
+            anyhow!(
+                "Negotiator failed to extract Proposals from Agreement. {}",
+                e
+            )
+        })?;
+
+        self.proposal_agreement
+            .insert(their.id.clone(), agreement_id.clone());
+        self.proposal_agreement
+            .insert(our.id.clone(), agreement_id.clone());
+
+        self.subscriptions
+            .insert(msg.agreement.id.clone(), msg.subscription_id.clone());
 
         // We expect that all `NegotiatorComponents` should return ready state.
-        // Otherwise we must reject Agreement proposals, because negotiations didn't end.
+        // Otherwise we must reject Agreement proposals, because negotiations weren't finished.
         match self
             .components
-            .negotiate_step(&demand_proposal, offer_proposal, Score::default())?
+            .negotiate_step(&their, our, Score::default())?
         {
-            NegotiationResult::Ready { .. } => {
-                self.agreement_channel
-                    .send(AgreementAction::ApproveAgreement { id: agreement_id })?;
+            NegotiationResult::Ready { proposal, score } => {
+                self.agreements.new_scored(
+                    ProposalScore {
+                        their,
+                        our: proposal,
+                        score: score.pointer_typed("/final-score").unwrap_or(0.0),
+                    },
+                    &agreement_id,
+                )?;
             }
-            NegotiationResult::Reject { reason } => {
+            NegotiationResult::Reject { reason, is_final } => {
                 self.agreement_channel
                     .send(AgreementAction::RejectAgreement {
                         id: agreement_id,
-                        reason,
+                        subscription_id: msg.subscription_id,
+                        reason: reason.final_flag(is_final).into(),
                     })?;
             }
             NegotiationResult::Negotiating { .. } => {
                 self.agreement_channel
                     .send(AgreementAction::RejectAgreement {
                         id: agreement_id,
-                        reason: Some(Reason::new("Negotiations aren't finished.")),
+                        subscription_id: msg.subscription_id,
+                        reason: RejectReason::new("Negotiations aren't finished.")
+                            .final_flag(true)
+                            .into(),
                     })?;
             }
         }
@@ -235,7 +329,7 @@ impl Handler<PostAgreementEvent> for Negotiator {
 
     fn handle(&mut self, msg: PostAgreementEvent, _: &mut Context<Self>) -> Self::Result {
         self.components
-            .on_post_terminate_event(&msg.agreement_id, &msg.event)
+            .on_agreement_event(&msg.agreement_id, &msg.event)
     }
 }
 
@@ -247,6 +341,195 @@ impl Handler<ControlEvent> for Negotiator {
     }
 }
 
+impl Handler<RequestAgreements> for Negotiator {
+    type Result = ();
+
+    fn handle(&mut self, msg: RequestAgreements, _: &mut Context<Self>) -> Self::Result {
+        self.agreements.set_goal(DecideGoal::Limit(msg.0))
+    }
+}
+
+/// Executes actions proposed by ProposalCollections. ProposalCollection collects
+/// Agreements/Proposals and decides, when we should send responses based on scores,
+/// number of artifacts collected, timeouts etc.
+impl StreamHandler<Feedback> for Negotiator {
+    fn handle(&mut self, item: Feedback, _ctx: &mut Context<Self>) {
+        match item.collection_type {
+            CollectionType::Agreement => match item.action {
+                FeedbackAction::Decide(reason) => {
+                    match reason {
+                        DecideReason::TimeElapsed => {
+                            log::info!("Choosing Agreements, because collect period elapsed.")
+                        }
+                        DecideReason::GoalReached => log::info!(
+                            "Choosing Agreements, because collected expected number of them."
+                        ),
+                    };
+                    self.agreements.decide()
+                }
+                FeedbackAction::Accept { id } => {
+                    let proposal_id = id.clone();
+                    let id = match self.proposal_agreement.get(&proposal_id) {
+                        Some(id) => id.clone(),
+                        None => {
+                            log::warn!(
+                                "Accepted Proposal [{}] with no matching Agreement.",
+                                proposal_id
+                            );
+                            return;
+                        }
+                    };
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
+                    };
+
+                    log::info!("Accepting Agreement [{}]", id);
+
+                    self.proposal_agreement.remove(&proposal_id);
+                    self.agreement_channel
+                        .send(AgreementAction::ApproveAgreement {
+                            id: id.clone(),
+                            subscription_id,
+                        })
+                        .map_err(|_| anyhow!("Failed to send AcceptAgreement for {}", id))
+                }
+                FeedbackAction::Reject {
+                    id,
+                    reason,
+                    is_final,
+                } => {
+                    let proposal_id = id.clone();
+                    let agreement_id = match self.proposal_agreement.get(&proposal_id) {
+                        Some(id) => id.clone(),
+                        None => {
+                            log::warn!(
+                                "Rejected Proposal [{}] with no matching Agreement.",
+                                proposal_id
+                            );
+                            return;
+                        }
+                    };
+
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
+                    };
+
+                    log::info!("Rejecting Agreement [{}]", agreement_id);
+
+                    if is_final {
+                        self.proposal_agreement.remove(&proposal_id);
+                    }
+
+                    self.agreement_channel
+                        .send(AgreementAction::RejectAgreement {
+                            id: agreement_id.clone(),
+                            subscription_id,
+                            reason: reason.into(),
+                        })
+                        .map_err(|_| {
+                            anyhow!("Failed to send RejectAgreement for [{}]", agreement_id)
+                        })
+                }
+            },
+            CollectionType::Proposal => match item.action {
+                FeedbackAction::Decide(reason) => {
+                    match reason {
+                        DecideReason::TimeElapsed => {
+                            log::info!("Choosing Proposals, because collect period elapsed.")
+                        }
+                        DecideReason::GoalReached => log::info!(
+                            "Choosing Proposals, because collected expected number of them."
+                        ),
+                    };
+                    self.proposals.decide()
+                }
+                FeedbackAction::Accept { id } => {
+                    log::info!("Accepting Proposal [{}]", id);
+
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
+                    };
+
+                    self.proposal_channel
+                        .send(ProposalAction::AcceptProposal {
+                            id: id.clone(),
+                            subscription_id,
+                        })
+                        .map_err(|_| anyhow!("Failed to send AcceptProposal for [{}]", id))
+                }
+                FeedbackAction::Reject { id, reason, .. } => {
+                    log::info!("Rejecting Proposal {}", id);
+
+                    let subscription_id = match self.subscriptions.get(&id) {
+                        None => return,
+                        Some(id) => id.to_string(),
+                    };
+
+                    self.proposal_channel
+                        .send(ProposalAction::RejectProposal {
+                            subscription_id,
+                            id: id.clone(),
+                            reason: reason.into(),
+                        })
+                        .map_err(|_| anyhow!("Failed to send RejectProposal for [{}]", id))
+                }
+            },
+        }
+        .map_err(|e| log::warn!("{}", e))
+        .ok();
+    }
+}
+
 impl Actor for Negotiator {
     type Context = Context<Self>;
+
+    fn started(&mut self, ctx: &mut Context<Self>) {
+        let p_channel = self
+            .proposals
+            .feedback_receiver
+            .take()
+            .expect("Proposals collection receiver already taken on initialization.");
+
+        let a_channel = self
+            .agreements
+            .feedback_receiver
+            .take()
+            .expect("Agreements collection receiver already taken on initialization.");
+        Self::add_stream(select(p_channel, a_channel), ctx);
+    }
+}
+
+impl CompositeNegotiatorConfig {
+    pub fn default_provider() -> CompositeNegotiatorConfig {
+        CompositeNegotiatorConfig {
+            proposals: CollectionConfig {
+                collect_period: Some(Duration::from_secs(5)),
+                collect_amount: Some(5),
+                goal: DecideGoal::Batch(10),
+            },
+            agreements: CollectionConfig {
+                collect_period: Some(Duration::from_secs(20)),
+                collect_amount: Some(5),
+                goal: DecideGoal::Limit(1),
+            },
+        }
+    }
+
+    pub fn default_test() -> CompositeNegotiatorConfig {
+        CompositeNegotiatorConfig {
+            proposals: CollectionConfig {
+                collect_period: Some(Duration::from_secs(5)),
+                collect_amount: Some(1),
+                goal: DecideGoal::Batch(10),
+            },
+            agreements: CollectionConfig {
+                collect_period: Some(Duration::from_secs(20)),
+                collect_amount: Some(1),
+                goal: DecideGoal::Limit(1),
+            },
+        }
+    }
 }

@@ -1,7 +1,9 @@
+mod collection;
 mod composite;
 pub mod factory;
 mod negotiators;
 
+pub(crate) use collection::ProposalsCollection;
 pub use composite::{Negotiator, NegotiatorCallbacks};
 
 pub use negotiators::{AgreementAction, NegotiatorAddr, ProposalAction};

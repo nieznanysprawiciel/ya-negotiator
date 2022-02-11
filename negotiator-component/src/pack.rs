@@ -5,7 +5,7 @@ use std::collections::HashMap;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 
 use crate::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, PostTerminateEvent, Score,
+    AgreementEvent, AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
 
 pub struct NegotiatorsPack {
@@ -61,8 +61,8 @@ impl NegotiatorComponent for NegotiatorsPack {
                     template = offer;
                     score = new_score;
                 }
-                NegotiationResult::Reject { reason } => {
-                    return Ok(NegotiationResult::Reject { reason })
+                NegotiationResult::Reject { reason, is_final } => {
+                    return Ok(NegotiationResult::Reject { reason, is_final })
                 }
             }
         }
@@ -152,14 +152,14 @@ impl NegotiatorComponent for NegotiatorsPack {
         Ok(())
     }
 
-    fn on_post_terminate_event(
+    fn on_agreement_event(
         &mut self,
         agreement_id: &str,
-        event: &PostTerminateEvent,
+        event: &AgreementEvent,
     ) -> anyhow::Result<()> {
         for (name, component) in &mut self.components {
             component
-                .on_post_terminate_event(agreement_id, event)
+                .on_agreement_event(agreement_id, event)
                 .map_err(|e| {
                     log::warn!(
                         "Negotiator component '{}' failed handling post Terminate event [{}]. {}",

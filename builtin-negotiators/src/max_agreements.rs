@@ -2,13 +2,11 @@ use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
-use ya_client_model::market::Reason;
-
 use ya_agreement_utils::{AgreementView, ProposalView};
 use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
-use ya_negotiator_component::transparent_impl;
+use ya_negotiator_component::reason::RejectReason;
 
 /// Negotiator that can limit number of running agreements.
 pub struct MaxAgreements {
@@ -53,10 +51,11 @@ impl NegotiatorComponent for MaxAgreements {
                 demand.id, // TODO: Should be just `id`, but I reuse AgreementView struct.
             );
             NegotiationResult::Reject {
-                reason: Some(Reason::new(format!(
+                reason: RejectReason::new(format!(
                     "No capacity available. Reached Agreements limit: {}",
                     self.max_agreements
-                ))),
+                )),
+                is_final: false,
             }
         };
         Ok(result)
@@ -86,9 +85,4 @@ impl NegotiatorComponent for MaxAgreements {
             )
         }
     }
-
-    transparent_impl!(fill_template);
-    transparent_impl!(on_proposal_rejected);
-    transparent_impl!(on_post_terminate_event);
-    transparent_impl!(control_event);
 }

@@ -11,7 +11,7 @@ use crate::provider::{provider_agreements_processor, provider_proposals_processo
 use crate::requestor::{requestor_agreements_processor, requestor_proposals_processor};
 
 use crate::prepare_test_dir;
-use anyhow::anyhow;
+use anyhow::{anyhow, bail};
 use futures::future::select_all;
 use futures::{Future, FutureExt};
 use std::collections::HashMap;
@@ -36,14 +36,18 @@ pub struct Framework {
     pub providers: HashMap<NodeId, Arc<Node>>,
 
     pub test_dir: PathBuf,
+    pub test_timeout: Duration,
 }
 
 impl Framework {
     pub fn new_empty(test_name: &str) -> anyhow::Result<Framework> {
+        let _ = env_logger::builder().try_init();
+
         Ok(Framework {
             requestors: HashMap::new(),
             providers: HashMap::new(),
             test_dir: prepare_test_dir(test_name)?,
+            test_timeout: Duration::from_secs(10),
         })
     }
 
@@ -57,6 +61,11 @@ impl Framework {
             .add_requestor(req_config)?;
 
         Ok(framework)
+    }
+
+    pub fn test_timeout(mut self, timeout: Duration) -> Self {
+        self.test_timeout = timeout;
+        self
     }
 
     pub fn add_provider(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
@@ -101,6 +110,17 @@ impl Framework {
         Ok(self)
     }
 
+    pub async fn request_agreements(&self, name: &str, count: usize) -> anyhow::Result<()> {
+        if let Ok(node) = self.provider(name) {
+            node.request_agreements(count).await?
+        }
+        if let Ok(node) = self.requestor(name) {
+            node.request_agreements(count).await?
+        }
+
+        bail!("Requestor/Provider named {} not found.", name)
+    }
+
     pub async fn run_for_templates(
         &self,
         demand: OfferTemplate,
@@ -128,7 +148,7 @@ impl Framework {
             )
         }
 
-        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(10));
+        let processors_handle = self.spawn_processors(record.clone(), self.test_timeout);
         self.init_for(offers, demands, record.clone()).await;
 
         processors_handle
@@ -164,6 +184,60 @@ impl Framework {
                 }
             }
         }
+    }
+
+    pub fn requestor(&self, name: &str) -> anyhow::Result<Arc<Node>> {
+        Ok(self
+            .requestors
+            .iter()
+            .find(|(_, node)| node.name == name)
+            .map(|(_, node)| node.clone())
+            .ok_or(anyhow!("Requestor {} not found.", name))?)
+    }
+
+    pub fn provider(&self, name: &str) -> anyhow::Result<Arc<Node>> {
+        Ok(self
+            .providers
+            .iter()
+            .find(|(_, node)| node.name == name)
+            .map(|(_, node)| node.clone())
+            .ok_or(anyhow!("Provider {} not found.", name))?)
+    }
+
+    pub async fn continue_run_for_named_requestor(
+        &self,
+        name: &str,
+        template: OfferTemplate,
+        record: &NegotiationRecord,
+    ) -> Result<NegotiationRecord, FrameworkError> {
+        let record = NegotiationRecordSync::from(record);
+        let node = self
+            .requestor(name)
+            .map_err(|e| FrameworkError::from(e, &record))?;
+
+        let offers = record
+            .0
+            .lock()
+            .unwrap()
+            .proposals
+            .iter()
+            .map(|(_, proposal)| proposal)
+            .cloned()
+            .collect();
+        let demands = vec![node
+            .create_offer(&template)
+            .await
+            .map_err(|e| FrameworkError::from(e, &record))?];
+
+        let processors_handle = self.spawn_processors(record.clone(), Duration::from_secs(10));
+        self.init_for(offers, demands, record.clone()).await;
+
+        processors_handle
+            .await
+            .map_err(|e| FrameworkError::from(e, &record))?;
+
+        let record = record.0.lock().unwrap();
+        Ok(record.clone())
     }
 
     fn spawn_processors(&self, record: NegotiationRecordSync, run_for: Duration) -> JoinHandle<()> {

@@ -14,6 +14,7 @@ use ya_negotiator_component::{static_lib::create_static_negotiator, NegotiatorsP
 use crate::builtin::AcceptAll;
 use crate::builtin::LimitExpiration;
 use crate::builtin::MaxAgreements;
+pub use crate::composite::CompositeNegotiatorConfig;
 use crate::composite::NegotiatorCallbacks;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -34,6 +35,7 @@ pub struct NegotiatorConfig {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct NegotiatorsConfig {
     pub negotiators: Vec<NegotiatorConfig>,
+    pub composite: CompositeNegotiatorConfig,
 }
 
 pub fn create_negotiator(
@@ -60,7 +62,7 @@ pub fn create_negotiator(
         components = components.add_component(&name, negotiator);
     }
 
-    let (negotiator, callbacks) = Negotiator::new(components);
+    let (negotiator, callbacks) = Negotiator::new(components, config.composite);
     Ok((Arc::new(NegotiatorAddr::from(negotiator)), callbacks))
 }
 
@@ -114,11 +116,21 @@ mod tests {
 
         let config = NegotiatorsConfig {
             negotiators: vec![expiration_conf, limit_conf],
+            composite: CompositeNegotiatorConfig::default_provider(),
         };
 
         let serialized = serde_yaml::to_string(&config).unwrap();
         println!("{}", serialized);
 
         create_negotiator(serde_yaml::from_str(&serialized).unwrap(), PathBuf::new()).unwrap();
+    }
+}
+
+impl Default for NegotiatorsConfig {
+    fn default() -> Self {
+        NegotiatorsConfig {
+            negotiators: vec![],
+            composite: CompositeNegotiatorConfig::default_provider(),
+        }
     }
 }

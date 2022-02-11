@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::reason::RejectReason;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_client_model::market::Reason;
 
@@ -34,15 +35,25 @@ pub enum NegotiationResult {
         proposal: ProposalView,
         score: Score,
     },
-    /// Proposal is not ready to become Agreement, but negotiations
-    /// are in progress.
+    /// Proposal is not ready to become Agreement, because negotiations
+    /// are still in progress. Should be used, when negotiator changed any field
+    /// in his Proposals in relation to our previous Proposal.
     Negotiating {
         proposal: ProposalView,
         score: Score,
     },
     /// Proposal is not acceptable and should be rejected.
     /// Negotiations can't be continued.
-    Reject { reason: Option<Reason> },
+    ///
+    /// If `is_final` flag is set to false, negotiations can be restarted
+    /// by countering Proposal, that we rejected. This can be used in case
+    /// we are not able to accept Proposal now, but we could negotiate further
+    /// in the future.
+    /// `is_final` set to true means, that Proposal will never be acceptable for us.
+    Reject {
+        reason: RejectReason,
+        is_final: bool,
+    },
 }
 
 /// Result of agreement execution.
@@ -66,7 +77,7 @@ pub enum AgreementResult {
 /// Notification about things happening with Agreement after it's termination.
 #[non_exhaustive]
 #[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum PostTerminateEvent {
+pub enum AgreementEvent {
     InvoiceAccepted,
     /// Could be partially paid??
     InvoicePaid,
@@ -97,118 +108,65 @@ pub trait NegotiatorComponent {
     ///            in modified shape.
     fn negotiate_step(
         &mut self,
-        incoming_proposal: &ProposalView,
+        _their: &ProposalView,
         template: ProposalView,
         score: Score,
-    ) -> anyhow::Result<NegotiationResult>;
+    ) -> anyhow::Result<NegotiationResult> {
+        Ok(NegotiationResult::Ready {
+            proposal: template,
+            score,
+        })
+    }
 
     /// Called during Offer/Demand creation. `NegotiatorComponent` should add properties
     /// and constraints for which it is responsible during future negotiations.
-    fn fill_template(&mut self, template: OfferTemplate) -> anyhow::Result<OfferTemplate>;
+    fn fill_template(&mut self, template: OfferTemplate) -> anyhow::Result<OfferTemplate> {
+        Ok(template)
+    }
 
     /// Called when Agreement was finished. `NegotiatorComponent` can use termination
     /// result to adjust his future negotiation strategy.
     fn on_agreement_terminated(
         &mut self,
-        agreement_id: &str,
-        result: &AgreementResult,
-    ) -> anyhow::Result<()>;
+        _agreement_id: &str,
+        _result: &AgreementResult,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// Called when Negotiator decided to approve/propose Agreement. It's only notification,
     /// `NegotiatorComponent` can't reject Agreement anymore.
     /// TODO: Can negotiator find out from which Proposals is this Agreement created??
-    fn on_agreement_approved(&mut self, agreement: &AgreementView) -> anyhow::Result<()>;
+    fn on_agreement_approved(&mut self, _agreement: &AgreementView) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// Called when other party rejects our Proposal.
     /// TODO: We should call this, if any of our components rejected Proposal either.
     ///       Add flag that will indicate who rejected.
     /// TODO: Add Reason parameter.
-    fn on_proposal_rejected(&mut self, proposal_id: &str) -> anyhow::Result<()>;
+    fn on_proposal_rejected(&mut self, _proposal_id: &str) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// Notifies `NegotiatorComponent`, about events related to Agreement appearing after
     /// it's termination.
-    fn on_post_terminate_event(
+    fn on_agreement_event(
         &mut self,
-        agreement_id: &str,
-        event: &PostTerminateEvent,
-    ) -> anyhow::Result<()>;
+        _agreement_id: &str,
+        _event: &AgreementEvent,
+    ) -> anyhow::Result<()> {
+        Ok(())
+    }
 
     /// Allows to control `NegotiatorComponent's` behavior or query any information
     /// from it. Thanks to this event Requestor/Provider implementation can interact with
     /// `NegotiatorComponents`.
     fn control_event(
         &mut self,
-        component: &str,
-        params: serde_json::Value,
-    ) -> anyhow::Result<serde_json::Value>;
-}
-
-/// Generates transparent implementation of selected function, which
-/// does something neutral (Does nothing but in the way that doesn't affect rest
-/// of negotiations).
-#[macro_export]
-macro_rules! transparent_impl {
-    (on_post_terminate_event) => {
-        fn on_post_terminate_event(
-            &mut self,
-            _agreement_id: &str,
-            _event: &ya_negotiator_component::component::PostTerminateEvent,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    };
-    (negotiate_step) => {
-        fn negotiate_step(
-            &mut self,
-            _demand: &ya_agreement_utils::ProposalView,
-            offer: ya_agreement_utils::ProposalView,
-            score: ya_negotiator_component::component::Score,
-        ) -> anyhow::Result<ya_negotiator_component::component::NegotiationResult> {
-            Ok(
-                ya_negotiator_component::component::NegotiationResult::Ready {
-                    proposal: offer,
-                    score,
-                },
-            )
-        }
-    };
-    (fill_template) => {
-        fn fill_template(
-            &mut self,
-            offer_template: ya_agreement_utils::OfferTemplate,
-        ) -> anyhow::Result<ya_agreement_utils::OfferTemplate> {
-            Ok(offer_template)
-        }
-    };
-    (on_agreement_terminated) => {
-        fn on_agreement_terminated(
-            &mut self,
-            _agreement_id: &str,
-            _result: &ya_negotiator_component::component::AgreementResult,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    };
-    (on_agreement_approved) => {
-        fn on_agreement_approved(
-            &mut self,
-            _agreement: &ya_agreement_utils::AgreementView,
-        ) -> anyhow::Result<()> {
-            Ok(())
-        }
-    };
-    (on_proposal_rejected) => {
-        fn on_proposal_rejected(&mut self, _proposal_id: &str) -> anyhow::Result<()> {
-            Ok(())
-        }
-    };
-    (control_event) => {
-        fn control_event(
-            &mut self,
-            component: &str,
-            params: serde_json::Value,
-        ) -> anyhow::Result<serde_json::Value> {
-            Ok(serde_json::Value::Null)
-        }
-    };
+        _component: &str,
+        _params: serde_json::Value,
+    ) -> anyhow::Result<serde_json::Value> {
+        Ok(serde_json::Value::Null)
+    }
 }

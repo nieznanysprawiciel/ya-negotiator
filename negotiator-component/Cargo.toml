@@ -8,9 +8,10 @@ edition = "2018"
 
 [dependencies]
 ya-agreement-utils = { path = "../agreement-utils" }
-ya-client-model = "0.2"
+ya-client-model = "0.3"
 
 anyhow = "1.0.31"
+derive_more = "0.99"
 lazy_static = "1.4"
 log = "0.4"
 log-derive = "0.4"

@@ -13,14 +13,16 @@ ya-builtin-negotiators = { path = "../builtin-negotiators" }
 ya-negotiator-shared-lib-interface = { path = "../interfaces/shared-lib" }
 ya-negotiators = { path = "../" }
 
-ya-client-model = "0.2"
+ya-client-model = "0.3"
 
 actix = { version = "0.10" }
 anyhow = "1.0.31"
 backtrace = "0.3"
 chrono = "0.4.10"
 derive_more = "0.99.11"
+env_logger = "0.9.0"
 futures = "0.3.12"
+log = "0.4.14"
 serde = "1.0"
 serde_json = "1.0"
 serde_with = "1.6.4"

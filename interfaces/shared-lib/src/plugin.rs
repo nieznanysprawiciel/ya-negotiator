@@ -15,7 +15,6 @@ pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, Score,
 };
-pub use ya_negotiator_component::transparent_impl;
 
 pub trait NegotiatorConstructor<T: NegotiatorComponent + Sync + Send + Sized>: Sync + Send {
     fn new(name: &str, config: serde_yaml::Value, working_dir: PathBuf) -> anyhow::Result<T>;
@@ -160,15 +159,11 @@ where
         }
     }
 
-    fn on_post_terminate_event(
-        &mut self,
-        agreement_id: &RStr,
-        event: &RStr,
-    ) -> RResult<(), RString> {
+    fn on_agreement_event(&mut self, agreement_id: &RStr, event: &RStr) -> RResult<(), RString> {
         match (|| {
             let result = serde_json::from_str(event.as_str()).map_err(SharedLibError::from)?;
             self.component
-                .on_post_terminate_event(agreement_id.as_str(), &result)
+                .on_agreement_event(agreement_id.as_str(), &result)
                 .map_err(|e| SharedLibError::Negotiation(e.to_string()))?;
             Result::<(), SharedLibError>::Ok(())
         })() {

@@ -187,7 +187,9 @@ impl ProposalsCollection {
         let accepted = self.awaiting.drain(0..goal).collect::<Vec<_>>();
         let rejected = self.awaiting.drain(..).collect::<Vec<_>>();
 
-        log::info!("Decided to accept {} {}(s).", goal, self.collection_type);
+        if goal != 0 {
+            log::info!("Decided to accept {} {}(s).", goal, self.collection_type);
+        }
 
         for proposal in accepted {
             self.send_feedback(FeedbackAction::Accept {

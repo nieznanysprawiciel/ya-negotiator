@@ -359,9 +359,9 @@ impl StreamHandler<Feedback> for Negotiator {
                 FeedbackAction::Decide(reason) => {
                     match reason {
                         DecideReason::TimeElapsed => {
-                            log::info!("Choosing Agreements, because collect period elapsed.")
+                            log::debug!("Choosing Agreements, because collect period elapsed.")
                         }
-                        DecideReason::GoalReached => log::info!(
+                        DecideReason::GoalReached => log::debug!(
                             "Choosing Agreements, because collected expected number of them."
                         ),
                     };
@@ -437,9 +437,9 @@ impl StreamHandler<Feedback> for Negotiator {
                 FeedbackAction::Decide(reason) => {
                     match reason {
                         DecideReason::TimeElapsed => {
-                            log::info!("Choosing Proposals, because collect period elapsed.")
+                            log::debug!("Choosing Proposals, because collect period elapsed.")
                         }
-                        DecideReason::GoalReached => log::info!(
+                        DecideReason::GoalReached => log::debug!(
                             "Choosing Proposals, because collected expected number of them."
                         ),
                     };

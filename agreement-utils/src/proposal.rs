@@ -106,10 +106,12 @@ impl TryFrom<Value> for ProposalView {
 
     fn try_from(mut value: Value) -> Result<Self, Self::Error> {
         let offer = OfferTemplate {
-            properties: value
-                .pointer_mut("/properties")
-                .map(Value::take)
-                .unwrap_or(Value::Null),
+            properties: expand(
+                value
+                    .pointer_mut("/properties")
+                    .map(Value::take)
+                    .unwrap_or(Value::Null),
+            ),
             constraints: value
                 .pointer("/constraints")
                 .as_typed(Value::as_str)?

@@ -6,7 +6,10 @@ mod negotiators;
 pub(crate) use collection::ProposalsCollection;
 pub use composite::{Negotiator, NegotiatorCallbacks};
 
-pub use negotiators::{AgreementAction, NegotiatorAddr, ProposalAction};
+pub use negotiators::{
+    AgreementAction, AgreementSigned, ControlEvent, NegotiatorAddr, PostAgreementEvent,
+    ProposalAction,
+};
 
 pub use ya_negotiator_component::{
     AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack,

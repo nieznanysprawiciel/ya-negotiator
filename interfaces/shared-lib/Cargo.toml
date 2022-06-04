@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 ya-agreement-utils = { path = "../../agreement-utils" }
 ya-negotiator-component = { path = "../../negotiator-component" }
-ya-client-model = "0.3"
+ya-client-model = "0.4"
 
 abi_stable = "0.9.1"
 anyhow = "1.0"

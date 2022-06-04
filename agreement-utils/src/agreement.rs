@@ -67,6 +67,11 @@ impl AgreementView {
         Ok(map)
     }
 
+    pub fn get_property<'a, T: Deserialize<'a>>(&self, property: &str) -> Result<T, Error> {
+        let pointer = format!("/{}", property.replace(".", "/"));
+        self.pointer_typed(pointer.as_str())
+    }
+
     pub fn remove_property(&mut self, pointer: &str) -> Result<(), Error> {
         let path: Vec<&str> = pointer.split('/').collect();
         Ok(

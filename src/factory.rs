@@ -1,5 +1,6 @@
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -49,6 +50,8 @@ pub fn create_negotiator(
         let working_dir = working_dir.join(&name);
 
         log::info!("Creating negotiator: {}", name);
+
+        fs::create_dir_all(&working_dir)?;
 
         let negotiator = match config.load_mode {
             LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,

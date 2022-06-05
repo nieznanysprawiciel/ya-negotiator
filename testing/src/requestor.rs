@@ -13,7 +13,8 @@ use backtrace::Backtrace;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::sync::Arc;
-use tokio::stream::{StreamExt, StreamMap};
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::{StreamExt, StreamMap};
 
 /// Receives Proposal and Agreement reactions from negotiators and processes them.
 /// This simulates Requestor Agent expected behavior.
@@ -239,7 +240,7 @@ pub async fn requestor_proposals_processor(
     requestors.iter().for_each(|(_, node)| {
         r_receivers.insert(
             node.node_id,
-            Box::pin(node.proposal_channel().into_stream()),
+            Box::pin(BroadcastStream::new(node.proposal_channel())),
         );
     });
 
@@ -280,7 +281,7 @@ pub async fn requestor_agreements_processor(
     requestors.iter().for_each(|(_, node)| {
         r_receivers.insert(
             node.node_id,
-            Box::pin(node.agreement_channel().into_stream()),
+            Box::pin(BroadcastStream::new(node.agreement_channel())),
         );
     });
 

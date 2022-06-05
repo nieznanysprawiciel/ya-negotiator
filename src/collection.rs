@@ -254,7 +254,7 @@ impl ProposalsCollection {
         let collection_type = self.collection_type;
 
         let future = async move {
-            tokio::time::delay_for(timeout).await;
+            tokio::time::sleep(timeout).await;
             feedback
                 .send(Feedback {
                     action: FeedbackAction::Decide(DecideReason::TimeElapsed),

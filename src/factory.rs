@@ -56,7 +56,11 @@ pub fn create_negotiator(
         let negotiator = match config.load_mode {
             LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,
             LoadMode::SharedLibrary { path } => {
-                create_shared_lib(&plugins_dir.join(path), &name, config.params, working_dir)?
+                let plugin_path = match path.is_relative() {
+                    true => plugins_dir.join(path),
+                    false => path,
+                };
+                create_shared_lib(&plugin_path, &name, config.params, working_dir)?
             }
             LoadMode::StaticLib { library } => create_static_negotiator(
                 &format!("{}::{}", &library, &name),
@@ -128,7 +132,12 @@ mod tests {
         let serialized = serde_yaml::to_string(&config).unwrap();
         println!("{}", serialized);
 
-        create_negotiator(serde_yaml::from_str(&serialized).unwrap(), PathBuf::new()).unwrap();
+        create_negotiator(
+            serde_yaml::from_str(&serialized).unwrap(),
+            PathBuf::new(),
+            PathBuf::new(),
+        )
+        .unwrap();
     }
 }
 

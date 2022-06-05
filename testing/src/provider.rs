@@ -1,17 +1,18 @@
-use ya_negotiators::{AgreementAction, AgreementResult, ProposalAction};
+use ya_negotiators::{AgreementAction, ProposalAction};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewProposal, Reason};
 use ya_client_model::NodeId;
 
+use crate::error::NegotiatorError;
 use crate::negotiation_record::NegotiationRecordSync;
 use crate::node::Node;
 
-use crate::error::NegotiatorError;
 use backtrace::Backtrace;
 use std::collections::HashMap;
 use std::sync::Arc;
-use tokio::stream::{StreamExt, StreamMap};
+use tokio_stream::wrappers::BroadcastStream;
+use tokio_stream::{StreamExt, StreamMap};
 
 /// Receives Proposal and Agreement reactions from negotiators and processes them.
 /// This simulates Provider Agent expected behavior.
@@ -169,10 +170,7 @@ impl ProviderReactions {
 
         record.reject_agreement(agreement, reason);
 
-        if let Err(e) = requestor
-            .agreement_finalized(&agreement_id, AgreementResult::ApprovalFailed)
-            .await
-        {
+        if let Err(e) = requestor.agreement_rejected(&agreement_id).await {
             record.error(requestor.node_id, node_id, e.into())
         }
         Ok(())
@@ -209,7 +207,7 @@ pub async fn provider_proposals_processor(
     providers.iter().for_each(|(_, node)| {
         p_receivers.insert(
             node.node_id,
-            Box::pin(node.proposal_channel().into_stream()),
+            Box::pin(BroadcastStream::new(node.proposal_channel())),
         );
     });
 
@@ -250,7 +248,7 @@ pub async fn provider_agreements_processor(
     providers.iter().for_each(|(_, node)| {
         p_receivers.insert(
             node.node_id,
-            Box::pin(node.agreement_channel().into_stream()),
+            Box::pin(BroadcastStream::new(node.agreement_channel())),
         );
     });
 

@@ -23,9 +23,8 @@ ya-negotiator-shared-lib-interface = { path = "interfaces/shared-lib" }
 
 ya-client-model = "0.4"
 
-actix = { version = "0.10" }
-actix-rt = "1.1.1"
-actix_derive = "0.5"
+actix = { version = "0.13" }
+actix_derive = "0.6"
 anyhow = "1.0"
 derive_more = "0.99"
 futures = "0.3"
@@ -35,10 +34,12 @@ serde = "1.0"
 serde_json = "1.0"
 serde_yaml = "0.8"
 thiserror = "1.0"
-tokio = { version = "0.2.6", features = ["sync"] }
+tokio = { version = "1", features = ["sync"] }
+tokio-stream = { version = "0.1.9", features = ["sync"] }
 
 [dev-dependencies]
 chrono = "0.4"
+actix-rt = "2.7"
 
 ya-negotiators-testing = { path = "testing" }
 

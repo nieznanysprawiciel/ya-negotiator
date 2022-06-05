@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["nieznany.sprawiciel <witek@golem.network>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 ya-agreement-utils = { path = "../agreement-utils" }
 ya-negotiator-component = { path = "../negotiator-component" }
@@ -15,7 +13,7 @@ ya-negotiators = { path = "../" }
 
 ya-client-model = "0.4"
 
-actix = { version = "0.10" }
+actix = { version = "0.13" }
 anyhow = "1.0"
 backtrace = "0.3"
 chrono = "0.4"
@@ -27,7 +25,7 @@ serde = "1.0"
 serde_json = "1.0"
 serde_with = "1.14"
 thiserror = "1.0"
-tokio = { version = "0.2.6", features = ["rt-core", "sync", "stream", "time"] }
-#tokio-stream = { version = "0.1.3", features = ["sync"] }
-rand = "0.7.2"
+tokio = { version = "1", features = ["rt", "sync", "time"] }
+tokio-stream = { version = "0.1.9", features = [] }
+rand = "0.8"
 

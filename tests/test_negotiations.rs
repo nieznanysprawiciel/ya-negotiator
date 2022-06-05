@@ -79,13 +79,14 @@ fn proposal_from_demand(demand: &NewDemand) -> Proposal {
 #[actix_rt::test]
 async fn test_negotiation() {
     let config = example_config();
+    let test_dir = prepare_test_dir("test_negotiation").unwrap();
     let (
         negotiator,
         NegotiatorCallbacks {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config, prepare_test_dir("test_negotiation").unwrap()).unwrap();
+    ) = create_negotiator(config, test_dir.clone(), test_dir).unwrap();
 
     let offer = negotiator.create_offer(&example_offer()).await.unwrap();
     let offer = proposal_from_demand(&offer);

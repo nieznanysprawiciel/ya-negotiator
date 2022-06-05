@@ -106,6 +106,13 @@ mod tests {
     use super::*;
     use ya_builtin_negotiators::*;
 
+    fn test_data_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("tests")
+            .join("test-workdir")
+    }
+
     #[actix_rt::test]
     async fn test_negotiators_config() {
         let expiration_conf = NegotiatorConfig {
@@ -132,10 +139,11 @@ mod tests {
         let serialized = serde_yaml::to_string(&config).unwrap();
         println!("{}", serialized);
 
+        let test_dir = test_data_dir();
         create_negotiator(
             serde_yaml::from_str(&serialized).unwrap(),
-            PathBuf::new(),
-            PathBuf::new(),
+            test_dir.clone(),
+            test_dir,
         )
         .unwrap();
     }

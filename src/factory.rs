@@ -19,6 +19,7 @@ pub use crate::composite::CompositeNegotiatorConfig;
 use crate::composite::NegotiatorCallbacks;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "kebab-case")]
 #[non_exhaustive]
 pub enum LoadMode {
     BuiltIn,
@@ -27,6 +28,7 @@ pub enum LoadMode {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
 pub struct NegotiatorConfig {
     pub name: String,
     pub load_mode: LoadMode,

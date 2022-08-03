@@ -58,6 +58,7 @@ pub enum FeedbackAction {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct CollectionConfig {
     /// Time period before making decision, which Proposals to choose.
+    #[serde(with = "humantime_serde")]
     pub collect_period: Option<Duration>,
     /// Number of Proposals to collect, after which best of them will be accepted.
     pub collect_amount: Option<usize>,
@@ -186,7 +187,9 @@ impl ProposalsCollection {
         let accepted = self.awaiting.drain(0..goal).collect::<Vec<_>>();
         let rejected = self.awaiting.drain(..).collect::<Vec<_>>();
 
-        log::info!("Decided to accept {} {}(s).", goal, self.collection_type);
+        if goal != 0 {
+            log::info!("Decided to accept {} {}(s).", goal, self.collection_type);
+        }
 
         for proposal in accepted {
             self.send_feedback(FeedbackAction::Accept {
@@ -251,7 +254,7 @@ impl ProposalsCollection {
         let collection_type = self.collection_type;
 
         let future = async move {
-            tokio::time::delay_for(timeout).await;
+            tokio::time::sleep(timeout).await;
             feedback
                 .send(Feedback {
                     action: FeedbackAction::Decide(DecideReason::TimeElapsed),

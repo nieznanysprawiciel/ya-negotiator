@@ -1,5 +1,6 @@
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
@@ -41,16 +42,25 @@ pub struct NegotiatorsConfig {
 pub fn create_negotiator(
     config: NegotiatorsConfig,
     working_dir: PathBuf,
+    plugins_dir: PathBuf,
 ) -> anyhow::Result<(Arc<NegotiatorAddr>, NegotiatorCallbacks)> {
     let mut components = NegotiatorsPack::new();
     for config in config.negotiators.into_iter() {
         let name = config.name;
         let working_dir = working_dir.join(&name);
 
+        log::info!("Creating negotiator: {}", name);
+
+        fs::create_dir_all(&working_dir)?;
+
         let negotiator = match config.load_mode {
             LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,
             LoadMode::SharedLibrary { path } => {
-                create_shared_lib(&path, &name, config.params, working_dir)?
+                let plugin_path = match path.is_relative() {
+                    true => plugins_dir.join(path),
+                    false => path,
+                };
+                create_shared_lib(&plugin_path, &name, config.params, working_dir)?
             }
             LoadMode::StaticLib { library } => create_static_negotiator(
                 &format!("{}::{}", &library, &name),
@@ -96,6 +106,13 @@ mod tests {
     use super::*;
     use ya_builtin_negotiators::*;
 
+    fn test_data_dir() -> PathBuf {
+        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("tests")
+            .join("test-workdir")
+    }
+
     #[actix_rt::test]
     async fn test_negotiators_config() {
         let expiration_conf = NegotiatorConfig {
@@ -122,7 +139,13 @@ mod tests {
         let serialized = serde_yaml::to_string(&config).unwrap();
         println!("{}", serialized);
 
-        create_negotiator(serde_yaml::from_str(&serialized).unwrap(), PathBuf::new()).unwrap();
+        let test_dir = test_data_dir();
+        create_negotiator(
+            serde_yaml::from_str(&serialized).unwrap(),
+            test_dir.clone(),
+            test_dir,
+        )
+        .unwrap();
     }
 }
 

@@ -101,6 +101,15 @@ pub struct AgreementFinalized {
     pub result: AgreementResult,
 }
 
+/// Failed to sign Agreement, either due to other party explicit rejection
+/// or due to timeout waiting for confirmation.
+/// TODO: Should we distinguish between these cases?
+#[derive(Message)]
+#[rtype(result = "Result<()>")]
+pub struct AgreementRejected {
+    pub agreement_id: String,
+}
+
 /// Notification about what happened to Agreement after termination.
 #[derive(Message)]
 #[rtype(result = "Result<()>")]
@@ -188,6 +197,14 @@ impl NegotiatorAddr {
             .send(AgreementFinalized {
                 agreement_id: agreement_id.to_string(),
                 result,
+            })
+            .await?
+    }
+
+    pub async fn agreement_rejected(&self, agreement_id: &str) -> Result<()> {
+        self.0
+            .send(AgreementRejected {
+                agreement_id: agreement_id.to_string(),
             })
             .await?
     }

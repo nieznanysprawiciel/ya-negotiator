@@ -4,6 +4,7 @@ use ya_client_model::NodeId;
 pub use crate::proposal::ProposalView;
 pub use crate::template::OfferTemplate;
 
+use crate::proposal::remove_property_impl;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -18,6 +19,8 @@ const DEFAULT_FORMAT: &str = "json";
 // TODO: Consider different structure:
 //  - 2 fields for parsed properties (demand, offer) as ProposalView
 //  - other fields for agreement remain typed.
+// TODO: For compatibility reasons this structure has very similar functions
+//  as ProposalView, but as long as we don't merge them, we need to keep them.
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct AgreementView {
     pub json: Value,
@@ -30,6 +33,10 @@ pub type DemandView = ProposalView;
 impl AgreementView {
     pub fn pointer(&self, pointer: &str) -> Option<&Value> {
         self.json.pointer(pointer)
+    }
+
+    pub fn pointer_mut(&mut self, pointer: &str) -> Option<&mut Value> {
+        self.json.pointer_mut(pointer)
     }
 
     pub fn pointer_typed<'a, T: Deserialize<'a>>(&self, pointer: &str) -> Result<T, Error> {
@@ -58,6 +65,22 @@ impl AgreementView {
             })
             .collect();
         Ok(map)
+    }
+
+    pub fn get_property<'a, T: Deserialize<'a>>(&self, property: &str) -> Result<T, Error> {
+        let pointer = format!("/{}", property.replace(".", "/"));
+        self.pointer_typed(pointer.as_str())
+    }
+
+    pub fn remove_property(&mut self, pointer: &str) -> Result<(), Error> {
+        let path: Vec<&str> = pointer.split('/').collect();
+        Ok(
+            // Path should start with '/', so we must omit first element, which will be empty.
+            remove_property_impl(&mut self.json, &path[1..]).map_err(|e| match e {
+                Error::NoKey(_) => Error::NoKey(pointer.to_string()),
+                _ => e,
+            })?,
+        )
     }
 
     pub fn requestor_id(&self) -> Result<NodeId, Error> {
@@ -630,5 +653,107 @@ constraints: |
                 .as_typed(Value::as_f64)
                 .unwrap()
         );
+    }
+
+    const REMOVE_EXAMPLE: &str = r#"{
+        "properties": {
+            "golem": {
+                "srv.caps.multi-activity": true,
+                "inf": {
+                    "mem.gib": 0.5,
+                    "storage.gib": 5
+                },
+                "activity.caps": {
+                    "transfer.protocol": [
+                        "http",
+                        "https",
+                        "container"
+                    ]
+                }
+            }
+        }
+    }"#;
+
+    #[test]
+    fn remove_property_from_object() {
+        let reference = serde_json::json!({
+            "properties": {
+                "golem": {
+                    "inf": {
+                        "mem.gib": 0.5,
+                        "storage.gib": 5
+                    },
+                    "activity.caps": {
+                        "transfer.protocol": [
+                            "http",
+                            "https",
+                            "container"
+                        ]
+                    }
+                }
+            }
+        });
+        let mut view = AgreementView {
+            json: try_from_json(REMOVE_EXAMPLE).unwrap(),
+            id: Default::default(),
+        };
+        view.remove_property("/properties/golem/srv/caps/multi-activity")
+            .unwrap();
+
+        assert_eq!(view.json, expand(reference));
+    }
+
+    #[test]
+    fn remove_property_from_array() {
+        let reference = serde_json::json!({
+            "properties": {
+                "golem": {
+                    "srv.caps.multi-activity": true,
+                    "inf": {
+                        "mem.gib": 0.5,
+                        "storage.gib": 5
+                    },
+                    "activity.caps": {
+                        "transfer.protocol": [
+                            "http",
+                            "container"
+                        ]
+                    }
+                }
+            }
+        });
+        let mut view = AgreementView {
+            json: try_from_json(REMOVE_EXAMPLE).unwrap(),
+            id: Default::default(),
+        };
+        view.remove_property("/properties/golem/activity/caps/transfer/protocol/1")
+            .unwrap();
+
+        assert_eq!(view.json, expand(reference));
+    }
+
+    #[test]
+    fn remove_property_tree() {
+        let reference = serde_json::json!({
+            "properties": {
+                "golem": {
+                    "srv.caps.multi-activity": true,
+                    "activity.caps": {
+                        "transfer.protocol": [
+                            "http",
+                            "https",
+                            "container"
+                        ]
+                    }
+                }
+            }
+        });
+        let mut view = AgreementView {
+            json: try_from_json(REMOVE_EXAMPLE).unwrap(),
+            id: Default::default(),
+        };
+        view.remove_property("/properties/golem/inf").unwrap();
+
+        assert_eq!(view.json, expand(reference));
     }
 }

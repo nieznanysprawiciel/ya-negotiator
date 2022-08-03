@@ -89,7 +89,7 @@ async fn test_requestor_provider_flow() {
             record
                 .agreements
                 .iter()
-                .map(|(_, agreement)| (agreement, AgreementResult::ClosedByRequestor))
+                .map(|(_, agreement)| (agreement, AgreementResult::ClosedByThem))
                 .collect(),
         )
         .await;
@@ -125,7 +125,7 @@ async fn test_negotiations_after_agreement_termination() {
             record
                 .agreements
                 .iter()
-                .map(|(_, agreement)| (agreement, AgreementResult::ClosedByRequestor))
+                .map(|(_, agreement)| (agreement, AgreementResult::ClosedByThem))
                 .collect(),
         )
         .await;

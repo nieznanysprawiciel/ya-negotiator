@@ -87,11 +87,7 @@ impl NegotiatorComponent for NegotiatorsPack {
     ) -> anyhow::Result<OfferTemplate> {
         for (name, component) in &mut self.components {
             offer_template = component.fill_template(offer_template).map_err(|e| {
-                anyhow!(
-                    "Negotiator component '{}' failed filling Offer template. {}",
-                    name,
-                    e
-                )
+                anyhow!("Negotiator component '{name}' failed filling Offer template. {e}")
             })?;
         }
         Ok(offer_template)
@@ -107,10 +103,7 @@ impl NegotiatorComponent for NegotiatorsPack {
                 .on_agreement_terminated(agreement_id, result)
                 .map_err(|e| {
                     log::warn!(
-                        "Negotiator component '{}' failed handling Agreement [{}] termination. {}",
-                        name,
-                        agreement_id,
-                        e
+                        "Negotiator component '{name}' failed handling Agreement [{agreement_id}] termination. {e}"
                     )
                 })
                 .ok();
@@ -124,10 +117,8 @@ impl NegotiatorComponent for NegotiatorsPack {
                 .on_agreement_approved(agreement)
                 .map_err(|e| {
                     log::warn!(
-                        "Negotiator component '{}' failed handling Agreement [{}] approval. {}",
-                        name,
+                        "Negotiator component '{name}' failed handling Agreement [{}] approval. {e}",
                         agreement.id,
-                        e
                     )
                 })
                 .ok();
@@ -141,10 +132,7 @@ impl NegotiatorComponent for NegotiatorsPack {
                 .on_proposal_rejected(proposal_id)
                 .map_err(|e| {
                     log::warn!(
-                        "Negotiator component '{}' failed handling Proposal [{}] rejection. {}",
-                        name,
-                        proposal_id,
-                        e
+                        "Negotiator component '{name}' failed handling Proposal [{proposal_id}] rejection. {e}",
                     )
                 })
                 .ok();
@@ -162,10 +150,7 @@ impl NegotiatorComponent for NegotiatorsPack {
                 .on_agreement_event(agreement_id, event)
                 .map_err(|e| {
                     log::warn!(
-                        "Negotiator component '{}' failed handling post Terminate event [{}]. {}",
-                        name,
-                        agreement_id,
-                        e
+                        "Negotiator component '{name}' failed handling post Terminate event [{agreement_id}]. {e}",
                     )
                 })
                 .ok();

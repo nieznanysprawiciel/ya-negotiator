@@ -26,6 +26,10 @@ impl ProposalView {
         self.content.pointer(pointer)
     }
 
+    pub fn pointer_mut(&mut self, pointer: &str) -> Option<&mut Value> {
+        self.content.properties.pointer_mut(pointer)
+    }
+
     pub fn pointer_typed<'a, T: Deserialize<'a>>(&self, pointer: &str) -> Result<T, Error> {
         self.content.pointer_typed(pointer)
     }
@@ -36,6 +40,70 @@ impl ProposalView {
     ) -> Result<HashMap<String, T>, Error> {
         self.content.properties_at(pointer)
     }
+
+    pub fn get_property<'a, T: Deserialize<'a>>(&self, property: &str) -> Result<T, Error> {
+        let pointer = format!("/{}", property.replace(".", "/"));
+        self.pointer_typed(pointer.as_str())
+    }
+
+    pub fn remove_property(&mut self, pointer: &str) -> Result<(), Error> {
+        let path: Vec<&str> = pointer.split('/').collect();
+        Ok(
+            // Path should start with '/', so we must omit first element, which will be empty.
+            remove_property_impl(&mut self.content.properties, &path[1..]).map_err(
+                |e| match e {
+                    Error::NoKey(_) => Error::NoKey(pointer.to_string()),
+                    _ => e,
+                },
+            )?,
+        )
+    }
+}
+
+pub(crate) fn remove_property_impl(
+    value: &mut serde_json::Value,
+    path: &[&str],
+) -> Result<(), Error> {
+    assert_ne!(path.len(), 0);
+    if path.len() == 1 {
+        remove_value(value, path[0])?;
+        Ok(())
+    } else {
+        let nested_value = value
+            .pointer_mut(&["/", path[0]].concat())
+            .ok_or(Error::NoKey(path[0].to_string()))?;
+        remove_property_impl(nested_value, &path[1..])?;
+
+        // Check if nested_value contains anything else.
+        // We remove this key if Value was empty.
+        match nested_value {
+            Value::Array(array) => {
+                if array.is_empty() {
+                    remove_value(value, path[0]).ok();
+                }
+            }
+            Value::Object(object) => {
+                if object.is_empty() {
+                    remove_value(value, path[0]).ok();
+                }
+            }
+            _ => (),
+        };
+        Ok(())
+    }
+}
+
+pub(crate) fn remove_value(value: &mut Value, name: &str) -> Result<Value, Error> {
+    Ok(match value {
+        Value::Array(array) => array.remove(
+            name.parse::<usize>()
+                .map_err(|_| Error::InvalidValue(name.to_string()))?,
+        ),
+        Value::Object(object) => object
+            .remove(name)
+            .ok_or(Error::InvalidValue(name.to_string()))?,
+        _ => Err(Error::InvalidValue(name.to_string()))?,
+    })
 }
 
 impl TryFrom<Value> for ProposalView {
@@ -43,10 +111,12 @@ impl TryFrom<Value> for ProposalView {
 
     fn try_from(mut value: Value) -> Result<Self, Self::Error> {
         let offer = OfferTemplate {
-            properties: value
-                .pointer_mut("/properties")
-                .map(Value::take)
-                .unwrap_or(Value::Null),
+            properties: expand(
+                value
+                    .pointer_mut("/properties")
+                    .map(Value::take)
+                    .unwrap_or(Value::Null),
+            ),
             constraints: value
                 .pointer("/constraints")
                 .as_typed(Value::as_str)?

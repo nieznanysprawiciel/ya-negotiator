@@ -42,7 +42,7 @@ impl Node {
         let name = name.unwrap_or(node_id.to_string());
         let working_dir = working_dir.join(&name);
 
-        let (negotiator, callbacks) = create_negotiator(config, working_dir)?;
+        let (negotiator, callbacks) = create_negotiator(config, working_dir.clone(), working_dir)?;
 
         let (agreement_sender, _) = broadcast::channel(16);
         let (proposal_sender, _) = broadcast::channel(16);
@@ -126,6 +126,10 @@ impl Node {
             .await
     }
 
+    pub async fn agreement_rejected(&self, agreement_id: &str) -> Result<()> {
+        self.negotiator.agreement_rejected(agreement_id).await
+    }
+
     pub fn into_proposal(
         &self,
         offer: DemandOfferBase,
@@ -193,10 +197,18 @@ impl Node {
 }
 
 pub fn generate_identity() -> NodeId {
-    let random_node_id: String = thread_rng().sample_iter(&Alphanumeric).take(20).collect();
+    let random_node_id: String = thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(20)
+        .map(char::from)
+        .collect();
     NodeId::from(random_node_id.as_bytes())
 }
 
 pub fn generate_id() -> String {
-    thread_rng().sample_iter(&Alphanumeric).take(64).collect()
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(64)
+        .map(char::from)
+        .collect()
 }

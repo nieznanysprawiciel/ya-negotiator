@@ -7,14 +7,15 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::UnboundedReceiverStream;
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::NewOffer;
 
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
 use crate::negotiators::{
-    AgreementAction, AgreementSigned, ControlEvent, PostAgreementEvent, ProposalAction,
-    ProposalRejected, RequestAgreements,
+    AgreementAction, AgreementRejected, AgreementSigned, ControlEvent, PostAgreementEvent,
+    ProposalAction, ProposalRejected, RequestAgreements,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::{NegotiatorsPack, ProposalsCollection};
@@ -315,6 +316,19 @@ impl Handler<AgreementFinalized> for Negotiator {
     }
 }
 
+impl Handler<AgreementRejected> for Negotiator {
+    type Result = anyhow::Result<()>;
+
+    fn handle(&mut self, msg: AgreementRejected, _: &mut Context<Self>) -> Self::Result {
+        let id = msg.agreement_id;
+        log::debug!(
+            "AgreementRejected for [{id}] ignored, since event isn't supported by negotiators yet."
+        );
+        //self.components.on_agreement_rejected(&msg.agreement_id)
+        Ok(())
+    }
+}
+
 impl Handler<ProposalRejected> for Negotiator {
     type Result = anyhow::Result<()>;
 
@@ -359,9 +373,9 @@ impl StreamHandler<Feedback> for Negotiator {
                 FeedbackAction::Decide(reason) => {
                     match reason {
                         DecideReason::TimeElapsed => {
-                            log::info!("Choosing Agreements, because collect period elapsed.")
+                            log::debug!("Choosing Agreements, because collect period elapsed.")
                         }
-                        DecideReason::GoalReached => log::info!(
+                        DecideReason::GoalReached => log::debug!(
                             "Choosing Agreements, because collected expected number of them."
                         ),
                     };
@@ -437,9 +451,9 @@ impl StreamHandler<Feedback> for Negotiator {
                 FeedbackAction::Decide(reason) => {
                     match reason {
                         DecideReason::TimeElapsed => {
-                            log::info!("Choosing Proposals, because collect period elapsed.")
+                            log::debug!("Choosing Proposals, because collect period elapsed.")
                         }
-                        DecideReason::GoalReached => log::info!(
+                        DecideReason::GoalReached => log::debug!(
                             "Choosing Proposals, because collected expected number of them."
                         ),
                     };
@@ -487,17 +501,19 @@ impl Actor for Negotiator {
     type Context = Context<Self>;
 
     fn started(&mut self, ctx: &mut Context<Self>) {
-        let p_channel = self
-            .proposals
-            .feedback_receiver
-            .take()
-            .expect("Proposals collection receiver already taken on initialization.");
+        let p_channel = UnboundedReceiverStream::new(
+            self.proposals
+                .feedback_receiver
+                .take()
+                .expect("Proposals collection receiver already taken on initialization."),
+        );
 
-        let a_channel = self
-            .agreements
-            .feedback_receiver
-            .take()
-            .expect("Agreements collection receiver already taken on initialization.");
+        let a_channel = UnboundedReceiverStream::new(
+            self.agreements
+                .feedback_receiver
+                .take()
+                .expect("Agreements collection receiver already taken on initialization."),
+        );
         Self::add_stream(select(p_channel, a_channel), ctx);
     }
 }

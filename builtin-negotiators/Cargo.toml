@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["nieznany.sprawiciel <witek@golem.network>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 ya-client-model = "0.4"
 ya-agreement-utils = { path = "../agreement-utils" }

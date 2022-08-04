@@ -12,7 +12,8 @@ pub use negotiators::{
 };
 
 pub use ya_negotiator_component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack,
+    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorComponentMut,
+    NegotiatorsPack,
 };
 
 pub mod builtin {
@@ -23,7 +24,7 @@ pub mod component {
     pub use ya_agreement_utils::ProposalView;
     pub use ya_negotiator_component::static_lib::register_negotiator;
     pub use ya_negotiator_component::{
-        AgreementEvent, AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorsPack,
-        RejectReason, Score,
+        AgreementEvent, AgreementResult, NegotiationResult, NegotiatorComponent,
+        NegotiatorComponentMut, NegotiatorsPack, RejectReason, Score,
     };
 }

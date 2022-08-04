@@ -3,7 +3,7 @@ use std::path::PathBuf;
 
 use crate::ya_negotiator_component::reason::RejectReason;
 use ya_negotiator_shared_lib_interface::plugin::{
-    NegotiationResult, NegotiatorComponent, NegotiatorConstructor, ProposalView, Score,
+    NegotiationResult, NegotiatorComponentMut, NegotiatorConstructor, ProposalView, Score,
 };
 use ya_negotiator_shared_lib_interface::*;
 
@@ -29,7 +29,7 @@ impl NegotiatorConstructor<FilterNodes> for FilterNodes {
     }
 }
 
-impl NegotiatorComponent for FilterNodes {
+impl NegotiatorComponentMut for FilterNodes {
     fn negotiate_step(
         &mut self,
         demand: &ProposalView,

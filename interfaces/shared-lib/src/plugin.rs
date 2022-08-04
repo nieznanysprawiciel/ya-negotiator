@@ -13,7 +13,7 @@ use std::str::FromStr;
 pub use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{
-    AgreementResult, NegotiationResult, NegotiatorComponent, Score,
+    AgreementResult, NegotiationResult, NegotiatorComponent, NegotiatorComponentMut, Score,
 };
 
 pub trait NegotiatorConstructor<T: NegotiatorComponent + Sync + Send + Sized>: Sync + Send {

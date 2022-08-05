@@ -13,6 +13,7 @@ pub struct ComponentMutWrapper<N: NegotiatorComponentMut + Sized> {
 
 /// Mutable version of negotiator component. It simplifies implementation in case someone
 /// doesn't need asynchronous execution, but requires access to `&mut self`.
+/// By using this trait you can avoid necessary synchronization, which is handled externally.
 pub trait NegotiatorComponentMut {
     /// Check documentation for `NegotiatorComponent::negotiate_step`.
     fn negotiate_step(

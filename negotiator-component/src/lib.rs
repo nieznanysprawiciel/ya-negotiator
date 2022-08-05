@@ -10,3 +10,4 @@ pub use component::{
 pub use component_mut::NegotiatorComponentMut;
 pub use pack::NegotiatorsPack;
 pub use reason::RejectReason;
+pub use static_lib::NegotiatorFactory;

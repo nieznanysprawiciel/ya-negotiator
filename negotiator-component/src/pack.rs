@@ -12,6 +12,7 @@ use crate::component::{
 };
 
 /// Processes multiple negotiators.
+#[derive(Clone)]
 pub struct NegotiatorsPack {
     components: Arc<RwLock<HashMap<String, Box<dyn NegotiatorComponent>>>>,
 }
@@ -20,6 +21,12 @@ impl NegotiatorsPack {
     pub fn new() -> NegotiatorsPack {
         NegotiatorsPack {
             components: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    pub fn with(components: HashMap<String, Box<dyn NegotiatorComponent>>) -> NegotiatorsPack {
+        NegotiatorsPack {
+            components: Arc::new(RwLock::new(components)),
         }
     }
 

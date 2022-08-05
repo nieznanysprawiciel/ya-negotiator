@@ -1,5 +1,6 @@
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -7,9 +8,8 @@ use std::sync::Arc;
 use super::negotiators::NegotiatorAddr;
 use crate::Negotiator;
 
-use ya_negotiator_shared_lib_interface::SharedLibNegotiator;
-
 use ya_negotiator_component::component::NegotiatorComponent;
+use ya_negotiator_component::static_lib::factory;
 use ya_negotiator_component::{static_lib::create_static_negotiator, NegotiatorsPack};
 
 use crate::builtin::AcceptAll;
@@ -46,7 +46,7 @@ pub fn create_negotiator(
     working_dir: PathBuf,
     plugins_dir: PathBuf,
 ) -> anyhow::Result<(Arc<NegotiatorAddr>, NegotiatorCallbacks)> {
-    let mut components = NegotiatorsPack::new();
+    let mut components = HashMap::<String, Box<dyn NegotiatorComponent>>::new();
     for config in config.negotiators.into_iter() {
         let name = config.name;
         let working_dir = working_dir.join(&name);
@@ -71,36 +71,36 @@ pub fn create_negotiator(
             )?,
         };
 
-        components = components.add_component(&name, negotiator);
+        components.insert(name, negotiator);
     }
 
-    let (negotiator, callbacks) = Negotiator::new(components, config.composite);
+    let (negotiator, callbacks) =
+        Negotiator::new(NegotiatorsPack::with(components), config.composite);
     Ok((Arc::new(NegotiatorAddr::from(negotiator)), callbacks))
 }
 
 pub fn create_builtin(
     name: &str,
     config: serde_yaml::Value,
-    _working_dir: PathBuf,
+    working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
     let negotiator = match &name[..] {
-        "LimitAgreements" => Box::new(MaxAgreements::new(config)?) as Box<dyn NegotiatorComponent>,
-        "LimitExpiration" => {
-            Box::new(LimitExpiration::new(config)?) as Box<dyn NegotiatorComponent>
-        }
-        "AcceptAll" => Box::new(AcceptAll::new(config)?) as Box<dyn NegotiatorComponent>,
+        "LimitAgreements" => factory::<MaxAgreements>()(name, config, working_dir)?,
+        "LimitExpiration" => factory::<LimitExpiration>()(name, config, working_dir)?,
+        "AcceptAll" => factory::<AcceptAll>()(name, config, working_dir)?,
         _ => bail!("BuiltIn negotiator {} doesn't exists.", &name),
     };
     Ok(negotiator)
 }
 
 pub fn create_shared_lib(
-    path: &Path,
-    name: &str,
-    config: serde_yaml::Value,
-    working_dir: PathBuf,
+    _path: &Path,
+    _name: &str,
+    _config: serde_yaml::Value,
+    _working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
-    SharedLibNegotiator::new(path, name, config, working_dir)
+    unimplemented!()
+    //SharedLibNegotiator::new(path, name, config, working_dir)
 }
 
 #[cfg(test)]

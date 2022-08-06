@@ -106,7 +106,7 @@ pub trait NegotiatorComponent {
     /// and return remaining part of Proposal unchanged.
     ///
     /// Parameters:
-    /// incoming_proposal - Proposal that we got from other party.
+    /// their    - Proposal that we got from other party.
     /// template - First component gets Proposal from previous negotiations. All subsequent
     ///            components change this Proposal and than it is passed to next component
     ///            in modified shape.

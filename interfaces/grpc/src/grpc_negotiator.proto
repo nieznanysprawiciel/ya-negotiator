@@ -25,9 +25,7 @@ message ShutdownRequest {
   string id = 1;
 }
 
-message ShutdownResponse {
-  string response = 1;
-}
+message ShutdownResponse {}
 
 message CallNegotiatorRequest {
   string id = 1;

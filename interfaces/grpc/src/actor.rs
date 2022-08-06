@@ -1,18 +1,30 @@
 use actix::prelude::*;
 use futures::FutureExt;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use std::sync::Arc;
 
 use crate::message::{NegotiationMessage, NegotiationResponse};
 use ya_negotiator_component::NegotiatorComponent;
 
+#[derive(Message, Clone, Debug)]
+#[rtype(result = "anyhow::Result<()>")]
+pub struct Shutdown {}
+
 /// Responsible for handling messages to single specific Negotiator.
 /// This is adapter between `Send` GrpcNegotiatorServer and `?Send` `NegotiatorComponent`.
 pub struct NegotiatorWrapper {
+    pub id: String,
     negotiator: Arc<Box<dyn NegotiatorComponent>>,
 }
 
-impl Actor for NegotiatorWrapper {
-    type Context = Context<Self>;
+impl NegotiatorWrapper {
+    pub fn new(negotiator: Box<dyn NegotiatorComponent>) -> NegotiatorWrapper {
+        NegotiatorWrapper {
+            id: generate_id(),
+            negotiator: Arc::new(negotiator),
+        }
+    }
 }
 
 impl Handler<NegotiationMessage> for NegotiatorWrapper {
@@ -67,4 +79,25 @@ impl Handler<NegotiationMessage> for NegotiatorWrapper {
         }
         .boxed_local()
     }
+}
+
+impl Handler<Shutdown> for NegotiatorWrapper {
+    type Result = anyhow::Result<()>;
+
+    fn handle(&mut self, _: Shutdown, ctx: &mut Self::Context) -> Self::Result {
+        ctx.stop();
+        Ok(())
+    }
+}
+
+pub fn generate_id() -> String {
+    thread_rng()
+        .sample_iter(&Alphanumeric)
+        .take(64)
+        .map(char::from)
+        .collect()
+}
+
+impl Actor for NegotiatorWrapper {
+    type Context = Context<Self>;
 }

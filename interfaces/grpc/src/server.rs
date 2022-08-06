@@ -1,6 +1,9 @@
-use actix::Addr;
+use actix::{Actor, Addr};
 use clap::Parser;
 use std::collections::HashMap;
+use std::path::PathBuf;
+use std::sync::Arc;
+use tokio::sync::RwLock;
 use tonic::{transport::Server, Request, Response, Status};
 
 use grpc::negotiator_service_server::{NegotiatorService, NegotiatorServiceServer};
@@ -9,7 +12,9 @@ use grpc::{
     CreateNegotiatorResponse, ShutdownRequest, ShutdownResponse,
 };
 
-use crate::actor::NegotiatorWrapper;
+use crate::actor::{NegotiatorWrapper, Shutdown};
+use crate::message::NegotiationMessage;
+use ya_negotiator_component::static_lib::create_static_negotiator;
 
 pub mod grpc {
     tonic::include_proto!("grpc_negotiator");
@@ -17,27 +22,62 @@ pub mod grpc {
 
 #[derive(Default)]
 pub struct GrpcNegotiatorServer {
-    components: HashMap<String, Addr<NegotiatorWrapper>>,
+    components: Arc<RwLock<HashMap<String, Addr<NegotiatorWrapper>>>>,
 }
 
 #[tonic::async_trait]
 impl NegotiatorService for GrpcNegotiatorServer {
     async fn create_negotiator(
         &self,
-        _request: Request<CreateNegotiatorRequest>,
+        request: Request<CreateNegotiatorRequest>,
     ) -> Result<Response<CreateNegotiatorResponse>, Status> {
-        Ok(Response::new(CreateNegotiatorResponse {
-            id: "None".to_string(),
-        }))
+        let CreateNegotiatorRequest {
+            name,
+            params,
+            workdir,
+        } = request.into_inner();
+
+        let params = serde_yaml::from_str(&params).map_err(|e| {
+            Status::invalid_argument(format!(
+                "Failed to deserialize params for negotiator: {name}. {e}"
+            ))
+        })?;
+
+        // Creating negotiator in new scope, because it is not sync and we must limit it's lifetime,
+        // so it can't outlive any await call.
+        let (id, wrapper) = {
+            let negotiator = create_static_negotiator(&name, params, PathBuf::from(workdir))
+                .map_err(|e| {
+                    Status::invalid_argument(format!("Failed to create negotiator {name}. {e}"))
+                })?;
+
+            let wrapper = NegotiatorWrapper::new(negotiator);
+            (wrapper.id.clone(), wrapper.start())
+        };
+
+        {
+            self.components.write().await.insert(id.clone(), wrapper);
+        }
+
+        Ok(Response::new(CreateNegotiatorResponse { id }))
     }
 
     async fn shutdown_negotiator(
         &self,
-        _request: Request<ShutdownRequest>,
+        request: Request<ShutdownRequest>,
     ) -> Result<Response<ShutdownResponse>, Status> {
-        Ok(Response::new(ShutdownResponse {
-            response: "Unimplemented".to_string(),
-        }))
+        let ShutdownRequest { id } = request.into_inner();
+
+        match { self.components.write().await.remove(&id) } {
+            None => {
+                return Err(Status::not_found(format!(
+                    "Can't shutdown. Negotiator: {id} not found."
+                )))
+            }
+            Some(wrapper) => wrapper.send(Shutdown {}).await.ok(),
+        };
+
+        Ok(Response::new(ShutdownResponse {}))
     }
 
     async fn call_negotiator(
@@ -45,13 +85,13 @@ impl NegotiatorService for GrpcNegotiatorServer {
         request: Request<CallNegotiatorRequest>,
     ) -> Result<Response<CallNegotiatorResponse>, Status> {
         let CallNegotiatorRequest { id, message } = request.into_inner();
-        let message = serde_json::from_str(&message).map_err(|e| {
+        let message: NegotiationMessage = serde_json::from_str(&message).map_err(|e| {
             Status::invalid_argument(format!(
                 "Failed to deserialize request for negotiator: {id}. {e}"
             ))
         })?;
 
-        let response = match self.components.get(&id) {
+        let response = match { self.components.read().await.get(&id).cloned() } {
             None => return Err(Status::not_found(format!("Negotiator: {id} not found"))),
             Some(wrapper) => wrapper
                 .send(message)

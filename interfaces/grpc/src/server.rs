@@ -117,6 +117,32 @@ struct Args {
     pub listen: String,
 }
 
+/// Runs grpc server. To be used in your negotiator binary.
+/// Example:
+/// ```no_run
+/// use ya_grpc_negotiator_api::entrypoint::{factory, register_negotiator, server_run};
+/// use ya_grpc_negotiator_api::plugin::{NegotiatorComponent, NegotiatorAsync, NegotiatorFactoryDefault};
+/// use std::path::PathBuf;
+///
+/// #[derive(Default)]
+/// pub struct ExampleNegotiator {}
+///
+/// impl NegotiatorComponent for ExampleNegotiator {}
+///
+/// impl NegotiatorFactoryDefault<ExampleNegotiator> for ExampleNegotiator {
+///     type Type = NegotiatorAsync;
+/// }
+///
+/// pub fn register_negotiators() {
+///     register_negotiator("grpc-example", "FilterNodes", factory::<ExampleNegotiator>());
+/// }
+///
+/// #[tokio::main]
+/// async fn main() -> anyhow::Result<()> {
+///     register_negotiators();
+///     server_run().await
+/// }
+///```
 #[allow(dead_code)]
 pub async fn server_run() -> anyhow::Result<()> {
     let args = Args::parse();
@@ -132,8 +158,3 @@ pub async fn server_run() -> anyhow::Result<()> {
 
     Ok(())
 }
-
-// #[tokio::main]
-// async fn main() -> anyhow::Result<()> {
-//     server_run().await
-// }

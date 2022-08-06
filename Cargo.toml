@@ -11,7 +11,8 @@ members = [
     "agreement-utils",
     "builtin-negotiators",
     "interfaces/grpc",
-    "testing"
+    "testing",
+    "examples/grpc-example"
 ]
 
 [dependencies]

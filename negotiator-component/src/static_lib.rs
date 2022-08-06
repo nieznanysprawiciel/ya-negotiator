@@ -1,5 +1,6 @@
 use anyhow::anyhow;
 use lazy_static::lazy_static;
+use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -60,6 +61,29 @@ impl NegotiatorInterfaceType for NegotiatorAsync {}
 impl NegotiatorInterfaceType for NegotiatorMut {}
 
 /// Defines common `Negotiators` creation interface.
+///
+/// Example:
+/// ```
+/// use std::path::PathBuf;
+/// use serde_yaml::Value;
+/// use ya_negotiator_component::NegotiatorFactory;
+/// use ya_negotiator_component::static_lib::NegotiatorAsync;
+///
+/// pub struct ExampleNegotiator {
+///     id: String,
+/// }
+///
+/// impl NegotiatorFactory<ExampleNegotiator> for ExampleNegotiator {
+///     type Type = NegotiatorAsync;
+///
+/// fn new(name: &str, config: Value, working_dir: PathBuf) -> anyhow::Result<ExampleNegotiator> {
+///         Ok(ExampleNegotiator {
+///             id: format!("important-negotiator-{name}")         
+///         })
+///     }
+/// }
+///
+/// ```
 pub trait NegotiatorFactory<T: Sized> {
     /// `NegotiatorAsync` if you implement `NegotiatorComponent` trait directly.
     /// `NegotiatorMut` if you implement `NegotiatorComponentMut`.
@@ -73,18 +97,47 @@ pub trait NegotiatorFactory<T: Sized> {
     fn new(name: &str, config: serde_yaml::Value, working_dir: PathBuf) -> anyhow::Result<T>;
 }
 
+/// `NegotiatorFactory` using `Default` implementation to create `NegotiatorComponent`.
+pub trait NegotiatorFactoryDefault<T: Sized + Default> {
+    type Type: NegotiatorInterfaceType;
+}
+
+impl<T, F, NT> NegotiatorFactory<T> for F
+where
+    T: Sized + Default,
+    F: NegotiatorFactoryDefault<T, Type = NT>,
+    NT: NegotiatorInterfaceType,
+{
+    type Type = <F as NegotiatorFactoryDefault<T>>::Type;
+
+    fn new(_name: &str, _config: Value, _working_dir: PathBuf) -> anyhow::Result<T> {
+        Ok(T::default())
+    }
+}
+
 /// Returns factory function for creating Negotiators.
 ///
 /// Example usage:
 ///
 /// ```
-/// use ya_negotiator_component::static_lib::{factory, register_negotiator};
+/// use std::path::PathBuf;
+/// use ya_negotiator_component::{NegotiatorComponent, NegotiatorFactoryDefault};
+/// use ya_negotiator_component::static_lib::{factory, NegotiatorAsync, register_negotiator};
+///
+/// #[derive(Default)]
+/// pub struct ExampleNegotiator {}
+///
+/// impl NegotiatorComponent for ExampleNegotiator {}
+///
+/// impl NegotiatorFactoryDefault<ExampleNegotiator> for ExampleNegotiator {
+///     type Type = NegotiatorAsync;
+/// }
 ///
 /// pub fn register_negotiators() {
 ///     register_negotiator(
 ///         "golem-negotiators",
 ///         "LimitExpiration",
-///         factory::<LimitExpiration>(),
+///         factory::<ExampleNegotiator>(),
 ///     );
 /// }
 /// ```

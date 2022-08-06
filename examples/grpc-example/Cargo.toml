@@ -1,0 +1,13 @@
+[package]
+name = "grpc-example"
+version = "0.1.0"
+authors = ["nieznany.sprawiciel <witek@golem.network>"]
+edition = "2021"
+
+[dependencies]
+ya-grpc-negotiator-api = { path = "../../interfaces/grpc"}
+
+anyhow = "1"
+serde = "1"
+serde_yaml = "0.9"
+tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

@@ -120,9 +120,10 @@ struct Args {
 /// Runs grpc server. To be used in your negotiator binary.
 /// Example:
 /// ```no_run
+/// use std::path::PathBuf;
+///
 /// use ya_grpc_negotiator_api::entrypoint::{factory, register_negotiator, server_run};
 /// use ya_grpc_negotiator_api::plugin::{NegotiatorComponent, NegotiatorAsync, NegotiatorFactoryDefault};
-/// use std::path::PathBuf;
 ///
 /// #[derive(Default)]
 /// pub struct ExampleNegotiator {}

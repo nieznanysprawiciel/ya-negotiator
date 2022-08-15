@@ -2,12 +2,14 @@ use anyhow::bail;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fs;
+use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 
 use super::negotiators::NegotiatorAddr;
 use crate::Negotiator;
 
+use ya_grpc_negotiator_api::create_grpc_negotiator;
 use ya_negotiator_component::component::NegotiatorComponent;
 use ya_negotiator_component::static_lib::{create_static_negotiator, factory};
 use ya_negotiator_component::NegotiatorsPack;
@@ -25,6 +27,8 @@ pub enum LoadMode {
     BuiltIn,
     SharedLibrary { path: PathBuf },
     StaticLib { library: String },
+    Grpc { path: PathBuf },
+    RemoteGrpc { address: SocketAddr },
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -41,7 +45,7 @@ pub struct NegotiatorsConfig {
     pub composite: CompositeNegotiatorConfig,
 }
 
-pub fn create_negotiator(
+pub async fn create_negotiator(
     config: NegotiatorsConfig,
     working_dir: PathBuf,
     plugins_dir: PathBuf,
@@ -66,6 +70,16 @@ pub fn create_negotiator(
             }
             LoadMode::StaticLib { library } => {
                 create_static_negotiator(&format!("{library}::{name}"), config.params, working_dir)?
+            }
+            LoadMode::Grpc { path } => {
+                let plugin_path = match path.is_relative() {
+                    true => plugins_dir.join(path),
+                    false => path,
+                };
+                create_grpc_negotiator(plugin_path, &name, config.params, working_dir).await?
+            }
+            LoadMode::RemoteGrpc { address: _ } => {
+                unimplemented!()
             }
         };
 
@@ -145,6 +159,7 @@ mod tests {
             test_dir.clone(),
             test_dir,
         )
+        .await
         .unwrap();
     }
 }

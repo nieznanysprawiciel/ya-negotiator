@@ -96,7 +96,9 @@ async fn test_shared_library() {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config, test_dir.clone(), test_dir).unwrap();
+    ) = create_negotiator(config, test_dir.clone(), test_dir)
+        .await
+        .unwrap();
 
     let offer = negotiator
         .create_offer(&example_offer_definition())

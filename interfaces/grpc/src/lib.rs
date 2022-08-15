@@ -1,6 +1,7 @@
 mod actor;
-mod client;
 mod component;
+mod factory;
+pub mod grpc;
 mod message;
 mod server;
 
@@ -10,6 +11,7 @@ pub use lazy_static::lazy_static;
 pub extern crate ya_agreement_utils;
 pub extern crate ya_negotiator_component;
 
+pub use factory::create_grpc_negotiator;
 pub use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 pub use ya_client_model::market::Reason;
 pub use ya_negotiator_component::component::{

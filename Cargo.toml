@@ -19,6 +19,7 @@ members = [
 ya-agreement-utils = { path = "agreement-utils" }
 ya-negotiator-component = { path = "negotiator-component" }
 ya-builtin-negotiators = { path = "builtin-negotiators" }
+ya-grpc-negotiator-api = { path = "interfaces/grpc"}
 
 ya-client-model = "0.4"
 

@@ -1015,6 +1015,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8b870d8c151b6f2fb93e84a13146138f05d02ed11c7e7c54f8826aaaf7c9f184"
 
 [[package]]
+name = "portpicker"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be97d76faf1bfab666e1375477b23fde79eccf0276e9b63b92a39d676a889ba9"
+dependencies = [
+ "rand 0.8.5",
+]
+
+[[package]]
 name = "ppv-lite86"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2001,10 +2010,12 @@ dependencies = [
  "actix",
  "actix_derive",
  "anyhow",
+ "async-trait",
  "clap",
  "derive_more",
  "futures",
  "lazy_static",
+ "portpicker",
  "prost",
  "protobuf-src",
  "rand 0.8.5",
@@ -2060,6 +2071,7 @@ dependencies = [
  "ya-agreement-utils",
  "ya-builtin-negotiators",
  "ya-client-model",
+ "ya-grpc-negotiator-api",
  "ya-negotiator-component",
  "ya-negotiators-testing",
 ]

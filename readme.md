@@ -13,6 +13,9 @@ Library for writing custom plugable negotiators for Yagna Agents.
         - [x] CompositeComponent should be declarative configured in yaml. No support for custom strategies here
         - [ ] Components can set time hints, how mush Negotiator should wait before accepting Proposals. (Dynamic waiting time.)
 - [ ] Advanced components API
+    - [ ] Pass additional environment info to components
+        - [ ] Market, Activity, Payment APIs addresses
+        - [ ] Components path (Nested negotiators can be created)
     - [x] Events notification
         - [x] Proposal rejection
         - [x] Invoice events (Accepted, Rejected, Paid)

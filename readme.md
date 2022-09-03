@@ -20,6 +20,7 @@ Library for writing custom plugable negotiators for Yagna Agents.
         - [x] Proposal rejection
         - [x] Invoice events (Accepted, Rejected, Paid)
         - [x] Control events - interaction ability with components, change/query params and behavior
+        - [ ] Provider/Requestor predefined events (Activity creation/destruction, Invoice/DebitNote sent)
         - [ ] Shutdown
     - [x] Allowing components to read/write files in specified directory (persistence). (This could be useful for storing reputation records)
     - [ ] Allow setting some configuration values from code. Merge config loaded from yaml and overriden values from code. (Some values in Provider are set in command line and  don't want to move them to config file.)

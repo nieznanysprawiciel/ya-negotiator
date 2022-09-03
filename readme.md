@@ -5,7 +5,7 @@ Library for writing custom plugable negotiators for Yagna Agents.
 ## Roadmap
 
 - [x] Basic Components API
-- [x] Support for loading negotiators from shared libraries
+- ~[x] Support for loading negotiators from shared libraries~
 - [x] Support for importing negotiators from statically linked libraries (library as Agent's dependency)
 - [ ] Scoring Proposals
     - [x] Asynchronous negotiation decisions to enable time and Score based negotiations.
@@ -27,15 +27,24 @@ Library for writing custom plugable negotiators for Yagna Agents.
 - [ ] Support for Negotiators in binaries with RPC communication.
     - [ ] Local negotiator spawned in new process
     - [ ] Connect to exisitng negotiator (remote)
-- [ ] Use `ya-negotiators` as Yagna Provider Agent dependency.
-- [ ] Use `ya-negotiators` in yarapi (https://github.com/golemfactory/yarapi)
+- [ ] Integrations
+    - [ ] Use `ya-negotiators` as Yagna Provider Agent dependency.
+    - [ ] Use `ya-negotiators` in yarapi (https://github.com/golemfactory/yarapi)
+    - [ ] `yapapi` integration
+        - [ ] Create python binding of `NegotiatorsChain`
+        - [ ] Create MarketStrategy in `yapapi` using `NegotiatorsChain` for scoring Offer
+        - [ ] Rewrite MarketStrategy handling to better match new model
+            - [ ] Multi-steps negotiations (currently `yapapi` responds to Proposal once, when it is in draft state and than it immediately proposes Agreement)
+            - [ ] `yapapi` negotiation decision is based on results from `NegotiatorsChain` (not only scoring)
+        - [ ] Rewrite mid-agreements payments to rust `NegotiatorComponent`
+        - [ ] Bind Events and other notification to pass this information to `NegotiatorChain`
 - [x] Testing Framework for components without need to use Agents
     - [x] Multi Provider/Requestor negotiations
     - [x] Recording negotiators' responses for making assertions
     - [x] Implement timeout for test negotiations
     - [x] Break infinite loops (set max number of negotiation steps)
     - [ ] Use matcher to check, if Proposals should be sent to all nodes or only to subset of them
-    - [ ] Predefined testset to test components
+    - [ ] Predefined testset for testing components in common scenarios
 - [ ] Example negotiators
     - [x] Builtin negotiators copied from Yagna Provider
     - [x] Example shared library negotiators filtering Nodes by name
@@ -44,7 +53,7 @@ Library for writing custom plugable negotiators for Yagna Agents.
     - [ ] Requestor-Provider ping component
     - [ ] Simple remote Nodes orchestrator example (choose which Node will pick up Offer)
 - [ ] Declarative components building blocks
-    - [ ] Negotiators Chain component
+    - [ ] `NegotiatorsChain` component
         - [ ] Allow to nest Negotiators
         - [ ] Allow to use seperate file descriptor to build the chain - Providers will be able to use predefined components chains or chains created by someone else. This will work like declarative mechanism of implementing components
     - [ ] Statistical and analitical components - generate data to use for scoring Offers

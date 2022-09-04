@@ -33,11 +33,11 @@ impl NegotiatorFactory<FilterNodes> for FilterNodes {
 impl NegotiatorComponentMut for FilterNodes {
     fn negotiate_step(
         &mut self,
-        demand: &ProposalView,
-        offer: ProposalView,
+        their: &ProposalView,
+        template: ProposalView,
         score: Score,
     ) -> anyhow::Result<NegotiationResult> {
-        Ok(match demand.pointer_typed("/golem/node/id/name") {
+        Ok(match their.pointer_typed("/golem/node/id/name") {
             Ok(node_name) => {
                 if self.names.contains(&node_name) {
                     NegotiationResult::Reject {
@@ -46,7 +46,7 @@ impl NegotiatorComponentMut for FilterNodes {
                     }
                 } else {
                     NegotiationResult::Ready {
-                        proposal: offer,
+                        proposal: template,
                         score,
                     }
                 }

@@ -633,6 +633,7 @@ dependencies = [
  "anyhow",
  "env_logger",
  "serde",
+ "serde_json",
  "serde_yaml",
  "tokio",
  "ya-grpc-negotiator-api",

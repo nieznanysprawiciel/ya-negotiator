@@ -43,6 +43,7 @@ actix-rt = "2.7"
 env_logger = "0.9"
 
 ya-negotiators-testing = { path = "testing" }
+grpc-example = { path = "examples/grpc-example" }
 
 # Tests
 test-binary = "2"

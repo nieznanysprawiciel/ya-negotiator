@@ -44,10 +44,14 @@ impl RemoteServiceHandle {
             .canonicalize()
             .map_err(|e| anyhow!("Can't canonicalize binary path. {e}"))?;
 
+        log::debug!("Looking for existing service: {}", path.display());
+
         if let Some(service) = existing_service(&path).await {
             log::debug!("Service: {} already running. Reusing..", path.display());
             return Ok(service);
         }
+
+        log::debug!("Service: {} isn't running yet.", path.display());
 
         let ip = "127.0.0.1";
         let port: u16 = pick_unused_port().ok_or(anyhow!("No ports free"))?;
@@ -62,19 +66,24 @@ impl RemoteServiceHandle {
 
         log::debug!("Connecting to service: {} on {address}", path.display());
 
+        // TODO: Find better way to know, that server is ready.
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
         let client = NegotiatorClient::connect(format!("http://{}", address.to_string()))
             .await
             .map_err(|e| anyhow!("Can't connect to service. {e}"))?;
 
-        Ok(RemoteServiceHandle {
+        let service = RemoteServiceHandle {
             inner: Arc::new(RwLock::new(RemoteServiceHandleImpl {
                 client,
                 process,
                 address,
-                file: path,
+                file: path.clone(),
             })),
-        })
+        };
+
+        // TODO: Race conditions between this place and earlier lookup.
+        (*SERVICES).write().await.insert(path, service.clone());
+        Ok(service)
     }
 
     pub async fn client(&self) -> NegotiatorServiceClient<tonic::transport::Channel> {

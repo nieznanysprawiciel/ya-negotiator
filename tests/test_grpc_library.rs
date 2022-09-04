@@ -15,6 +15,8 @@ use ya_client_model::market::{NewDemand, Proposal};
 use ya_negotiator_component::{AgreementEvent, AgreementResult};
 use ya_negotiators_testing::{prepare_test_dir, test_assets_dir};
 
+use grpc_example_lib::emit_errors::AddError;
+
 #[derive(Serialize, Deserialize)]
 pub struct FilterNodesConfig {
     pub names: Vec<String>,
@@ -201,4 +203,76 @@ async fn test_grpc_library_positive_calls() {
         )
         .await
         .unwrap();
+}
+
+/// Check if grpc correctly receives errors from negotiators.
+#[actix_rt::test]
+async fn test_grpc_library_negative_calls() {
+    env_logger::init();
+
+    let config = example_config();
+    let test_dir = prepare_test_dir("test_grpc_library_negative_calls").unwrap();
+    let (
+        negotiator,
+        NegotiatorCallbacks {
+            proposal_channel: _proposals,
+            agreement_channel: _agreements,
+        },
+    ) = create_negotiator(config, test_dir.clone(), test_dir)
+        .await
+        .unwrap();
+
+    let errors = vec![
+        "agreement_signed failed",
+        "agreement_rejected failed",
+        "agreement_finalized failed",
+        "proposal_rejected failed",
+        "post_agreement_event failed",
+        "react_to_proposal failed",
+        "react_to_agreement failed",
+    ];
+
+    for error in errors {
+        negotiator
+            .control_event(
+                "grpc-example::EmitErrors",
+                serde_json::to_value(AddError(error.to_string())).unwrap(),
+            )
+            .await
+            .unwrap();
+    }
+
+    negotiator
+        .agreement_signed(&sample_agreement().unwrap())
+        .await
+        .unwrap_err();
+
+    negotiator
+        .agreement_rejected("0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8")
+        .await
+        .unwrap_err();
+
+    negotiator
+        .agreement_finalized(
+            "0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8",
+            AgreementResult::ClosedByUs,
+        )
+        .await
+        .unwrap_err();
+
+    negotiator
+        .proposal_rejected(
+            "0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8",
+            &None,
+        )
+        .await
+        .unwrap_err();
+
+    negotiator
+        .post_agreement_event(
+            "0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8",
+            AgreementEvent::InvoiceAccepted,
+        )
+        .await
+        .unwrap_err();
 }

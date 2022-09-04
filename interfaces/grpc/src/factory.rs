@@ -45,6 +45,7 @@ impl RemoteServiceHandle {
             .map_err(|e| anyhow!("Can't canonicalize binary path. {e}"))?;
 
         if let Some(service) = existing_service(&path).await {
+            log::debug!("Service: {} already running. Reusing..", path.display());
             return Ok(service);
         }
 
@@ -52,12 +53,19 @@ impl RemoteServiceHandle {
         let port: u16 = pick_unused_port().ok_or(anyhow!("No ports free"))?;
         let address: SocketAddr = format!("{ip}:{port}").parse()?;
 
+        log::debug!("Spawning service: {}", path.display());
+
         let process = Command::new(path.clone())
             .args(["--listen", &address.to_string()])
             .spawn()
             .map_err(|e| anyhow!("Can't spawn process. {e}"))?;
 
-        let client = NegotiatorClient::connect(address.to_string()).await?;
+        log::debug!("Connecting to service: {} on {address}", path.display());
+
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        let client = NegotiatorClient::connect(format!("http://{}", address.to_string()))
+            .await
+            .map_err(|e| anyhow!("Can't connect to service. {e}"))?;
 
         Ok(RemoteServiceHandle {
             inner: Arc::new(RwLock::new(RemoteServiceHandleImpl {

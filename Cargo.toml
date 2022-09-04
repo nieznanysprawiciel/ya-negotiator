@@ -40,11 +40,12 @@ tokio-stream = { version = "0.1.9", features = ["sync"] }
 [dev-dependencies]
 chrono = "0.4"
 actix-rt = "2.7"
+env_logger = "0.9"
 
 ya-negotiators-testing = { path = "testing" }
 
-# Test will link this library dynamically
-#dll-negotiator = { path = "examples/dll-negotiator" }
+# Tests
+test-binary = "2"
 
 [patch.crates-io]
 #ya-client-model = { git = "https://github.com/golemfactory/ya-client.git", rev = "a613ac3e13e8f38003efa66a4d11cfcbc8254520"}

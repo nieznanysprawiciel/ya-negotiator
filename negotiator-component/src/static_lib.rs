@@ -22,7 +22,7 @@ lazy_static! {
 
 pub fn register_negotiator(library: &str, name: &str, constructor: ConstructorFunction) {
     let negotiator = format!("{}::{}", library, name);
-    println!("Registering: {}", negotiator);
+    log::debug!("Registering: {}", negotiator);
     (*CONSTRUCTORS)
         .lock()
         .unwrap()

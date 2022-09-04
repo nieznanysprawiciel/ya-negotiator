@@ -79,7 +79,7 @@ pub async fn create_negotiator(
                 create_grpc_negotiator(plugin_path, &name, config.params, working_dir).await?
             }
             LoadMode::RemoteGrpc { address: _ } => {
-                unimplemented!()
+                bail!("Not implemented")
             }
         };
 
@@ -111,8 +111,7 @@ pub fn create_shared_lib(
     _config: serde_yaml::Value,
     _working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
-    unimplemented!()
-    //SharedLibNegotiator::new(path, name, config, working_dir)
+    bail!("Not supported")
 }
 
 #[cfg(test)]

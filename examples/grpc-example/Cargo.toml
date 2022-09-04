@@ -7,7 +7,9 @@ edition = "2021"
 [dependencies]
 ya-grpc-negotiator-api = { path = "../../interfaces/grpc"}
 
+actix-rt = "2.7"
 anyhow = "1"
+env_logger = "0.9"
 serde = "1"
 serde_yaml = "0.9"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

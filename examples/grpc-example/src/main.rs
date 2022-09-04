@@ -8,8 +8,10 @@ pub fn register_negotiators() {
     register_negotiator("grpc-example", "FilterNodes", factory::<FilterNodes>());
 }
 
-#[tokio::main]
+#[actix_rt::main]
 async fn main() -> anyhow::Result<()> {
+    env_logger::init();
+
     register_negotiators();
     server_run().await
 }

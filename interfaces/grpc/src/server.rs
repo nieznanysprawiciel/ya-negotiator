@@ -1,4 +1,4 @@
-use actix::{Actor, Addr};
+use actix::{Actor, Addr, Arbiter};
 use clap::Parser;
 use std::collections::HashMap;
 use std::path::PathBuf;
@@ -20,9 +20,18 @@ pub mod grpc {
     tonic::include_proto!("grpc_negotiator");
 }
 
-#[derive(Default)]
 pub struct GrpcNegotiatorServer {
     components: Arc<RwLock<HashMap<String, Addr<NegotiatorWrapper>>>>,
+    arbiter: Arbiter,
+}
+
+impl Default for GrpcNegotiatorServer {
+    fn default() -> Self {
+        GrpcNegotiatorServer {
+            components: Arc::new(Default::default()),
+            arbiter: Arbiter::new(),
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -45,15 +54,32 @@ impl NegotiatorService for GrpcNegotiatorServer {
 
         // Creating negotiator in new scope, because it is not sync and we must limit it's lifetime,
         // so it can't outlive any await call.
-        let (id, wrapper) = {
-            let negotiator = create_static_negotiator(&name, params, PathBuf::from(workdir))
-                .map_err(|e| {
-                    Status::invalid_argument(format!("Failed to create negotiator {name}. {e}"))
-                })?;
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        let name_ = name.clone();
+        self.arbiter.spawn_fn(move || {
+            let negotiator = match create_static_negotiator(&name_, params, PathBuf::from(workdir))
+            {
+                Ok(negotiator) => negotiator,
+                Err(e) => {
+                    tx.send(Err(Status::invalid_argument(format!(
+                        "Failed to create negotiator {name_}. {e}"
+                    ))))
+                    .ok();
+                    return;
+                }
+            };
 
             let wrapper = NegotiatorWrapper::new(negotiator);
-            (wrapper.id.clone(), wrapper.start())
-        };
+
+            let id = wrapper.id.clone();
+            let addr = wrapper.start();
+
+            tx.send(Ok((id, addr))).ok();
+        });
+
+        let (id, wrapper) = rx.await.map_err(|e| {
+            Status::internal(format!("Failed to start NegotiatorWrapper {name}. {e}"))
+        })??;
 
         {
             self.components.write().await.insert(id.clone(), wrapper);
@@ -138,7 +164,7 @@ struct Args {
 ///     register_negotiator("grpc-example", "FilterNodes", factory::<ExampleNegotiator>());
 /// }
 ///
-/// #[tokio::main]
+/// #[actix_rt::main]
 /// async fn main() -> anyhow::Result<()> {
 ///     register_negotiators();
 ///     server_run().await
@@ -150,12 +176,14 @@ pub async fn server_run() -> anyhow::Result<()> {
     let addr = args.listen.parse().unwrap();
     let negotiator = GrpcNegotiatorServer::default();
 
-    println!("GrpcNegotiator server listening on {}", addr);
+    log::info!("GrpcNegotiator server listening on {}", addr);
 
     Server::builder()
         .add_service(NegotiatorServiceServer::new(negotiator))
         .serve(addr)
         .await?;
+
+    log::info!("Shutting down server..");
 
     Ok(())
 }

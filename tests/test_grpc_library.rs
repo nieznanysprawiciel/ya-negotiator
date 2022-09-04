@@ -1,6 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+use test_binary::build_test_binary;
 
 use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
 use ya_negotiators::factory::*;
@@ -15,24 +16,14 @@ pub struct FilterNodesConfig {
     pub names: Vec<String>,
 }
 
-#[cfg(debug_assertions)]
-fn debug_or_release() -> String {
-    "debug".to_string()
-}
-
-#[cfg(not(debug_assertions))]
-fn debug_or_release() -> String {
-    "release".to_string()
-}
-
 fn example_config() -> NegotiatorsConfig {
+    let test_bin_path =
+        build_test_binary("grpc-example", "examples").expect("error building grpc-example");
+
     let filter_conf = NegotiatorConfig {
-        name: "FilterNodes".to_string(),
-        load_mode: LoadMode::SharedLibrary {
-            path: PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                .join("target")
-                .join(debug_or_release())
-                .join("libdll_negotiator.so"),
+        name: "grpc-example::FilterNodes".to_string(),
+        load_mode: LoadMode::Grpc {
+            path: PathBuf::from(test_bin_path),
         },
         params: serde_yaml::to_value(FilterNodesConfig {
             names: vec!["dany".to_string()],
@@ -87,9 +78,11 @@ fn proposal_from_demand(demand: &NewDemand) -> Proposal {
 }
 
 #[actix_rt::test]
-async fn test_shared_library() {
+async fn test_grpc_library() {
+    env_logger::init();
+
     let config = example_config();
-    let test_dir = prepare_test_dir("test_shared_library").unwrap();
+    let test_dir = prepare_test_dir("test_grpc_library").unwrap();
     let (
         negotiator,
         NegotiatorCallbacks {

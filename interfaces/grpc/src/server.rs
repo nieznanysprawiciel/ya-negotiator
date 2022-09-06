@@ -123,7 +123,10 @@ impl NegotiatorService for GrpcNegotiatorServer {
                 .send(message)
                 .await
                 .map_err(|e| Status::internal(format!("Failed to call negotiator: {e}")))?
-                .map_err(|e| Status::ok(format!("Negotiator error: {e}")))?,
+                .map_err(|e| {
+                    log::info!("Negotiator error: {e}");
+                    Status::ok(format!("Negotiator error: {e}"))
+                })?,
         };
 
         Ok(Response::new(CallNegotiatorResponse {

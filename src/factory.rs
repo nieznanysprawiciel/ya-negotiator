@@ -45,50 +45,68 @@ pub struct NegotiatorsConfig {
     pub composite: CompositeNegotiatorConfig,
 }
 
-pub async fn create_negotiator(
+pub async fn create_negotiator_actor(
     config: NegotiatorsConfig,
     working_dir: PathBuf,
     plugins_dir: PathBuf,
 ) -> anyhow::Result<(Arc<NegotiatorAddr>, NegotiatorCallbacks)> {
-    let mut components = HashMap::<String, Box<dyn NegotiatorComponent>>::new();
-    for config in config.negotiators.into_iter() {
-        let name = config.name;
-        let working_dir = working_dir.join(&name);
-
-        log::info!("Creating negotiator: {}", name);
-
-        fs::create_dir_all(&working_dir)?;
-
-        let negotiator = match config.load_mode {
-            LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,
-            LoadMode::SharedLibrary { path } => {
-                let plugin_path = match path.is_relative() {
-                    true => plugins_dir.join(path),
-                    false => path,
-                };
-                create_shared_lib(&plugin_path, &name, config.params, working_dir)?
-            }
-            LoadMode::StaticLib { library } => {
-                create_static_negotiator(&format!("{library}::{name}"), config.params, working_dir)?
-            }
-            LoadMode::Grpc { path } => {
-                let plugin_path = match path.is_relative() {
-                    true => plugins_dir.join(path),
-                    false => path,
-                };
-                create_grpc_negotiator(plugin_path, &name, config.params, working_dir).await?
-            }
-            LoadMode::RemoteGrpc { address: _ } => {
-                bail!("Not implemented")
-            }
-        };
-
-        components.insert(name, negotiator);
-    }
+    let components = create_negotiators(config.clone(), working_dir, plugins_dir).await?;
 
     let (negotiator, callbacks) =
         Negotiator::new(NegotiatorsPack::with(components), config.composite);
     Ok((Arc::new(NegotiatorAddr::from(negotiator)), callbacks))
+}
+
+pub async fn create_negotiator(
+    config: NegotiatorConfig,
+    working_dir: PathBuf,
+    plugins_dir: PathBuf,
+) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
+    let name = config.name;
+    let working_dir = working_dir.join(&name);
+
+    log::info!("Creating negotiator: {}", name);
+
+    fs::create_dir_all(&working_dir)?;
+
+    Ok(match config.load_mode {
+        LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,
+        LoadMode::SharedLibrary { path } => {
+            let plugin_path = match path.is_relative() {
+                true => plugins_dir.join(path),
+                false => path,
+            };
+            create_shared_lib(&plugin_path, &name, config.params, working_dir)?
+        }
+        LoadMode::StaticLib { library } => {
+            create_static_negotiator(&format!("{library}::{name}"), config.params, working_dir)?
+        }
+        LoadMode::Grpc { path } => {
+            let plugin_path = match path.is_relative() {
+                true => plugins_dir.join(path),
+                false => path,
+            };
+            create_grpc_negotiator(plugin_path, &name, config.params, working_dir).await?
+        }
+        LoadMode::RemoteGrpc { address: _ } => {
+            bail!("Not implemented")
+        }
+    })
+}
+
+pub async fn create_negotiators(
+    config: NegotiatorsConfig,
+    working_dir: PathBuf,
+    plugins_dir: PathBuf,
+) -> anyhow::Result<HashMap<String, Box<dyn NegotiatorComponent>>> {
+    let mut components = HashMap::<String, Box<dyn NegotiatorComponent>>::new();
+    for config in config.negotiators.into_iter() {
+        components.insert(
+            config.name.clone(),
+            create_negotiator(config, working_dir.clone(), plugins_dir.clone()).await?,
+        );
+    }
+    Ok(components)
 }
 
 pub fn create_builtin(
@@ -153,7 +171,7 @@ mod tests {
         println!("{}", serialized);
 
         let test_dir = test_data_dir();
-        create_negotiator(
+        create_negotiator_actor(
             serde_yaml::from_str(&serialized).unwrap(),
             test_dir.clone(),
             test_dir,

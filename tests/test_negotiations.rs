@@ -86,7 +86,7 @@ async fn test_negotiation() {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config, test_dir.clone(), test_dir)
+    ) = create_negotiator_actor(config, test_dir.clone(), test_dir)
         .await
         .unwrap();
 

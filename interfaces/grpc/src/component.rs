@@ -1,6 +1,7 @@
 use anyhow::{anyhow, bail};
 use serde_yaml;
 use std::path::PathBuf;
+use tonic::Code;
 
 use crate::grpc::{CallNegotiatorRequest, CreateNegotiatorRequest};
 
@@ -68,7 +69,10 @@ impl GRPCComponent {
         let response = client
             .call_negotiator(request)
             .await
-            .map_err(|e| anyhow!("RPC call failed: {e}"))?
+            .map_err(|e| match e.code() {
+                Code::Ok => anyhow!("{}", e.message()),
+                _ => anyhow!("RPC call failed: {e}"),
+            })?
             .into_inner();
 
         let result: NegotiationResponse = serde_json::from_str(&response.response)

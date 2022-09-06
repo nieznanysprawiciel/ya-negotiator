@@ -106,7 +106,7 @@ async fn test_grpc_library() {
             proposal_channel: mut proposals,
             agreement_channel: mut agreements,
         },
-    ) = create_negotiator(config, test_dir.clone(), test_dir)
+    ) = create_negotiator_actor(config, test_dir.clone(), test_dir)
         .await
         .unwrap();
 
@@ -166,7 +166,7 @@ async fn test_grpc_library_positive_calls() {
             proposal_channel: _proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config, test_dir.clone(), test_dir)
+    ) = create_negotiator_actor(config, test_dir.clone(), test_dir)
         .await
         .unwrap();
 
@@ -212,13 +212,7 @@ async fn test_grpc_library_negative_calls() {
 
     let config = example_config();
     let test_dir = prepare_test_dir("test_grpc_library_negative_calls").unwrap();
-    let (
-        negotiator,
-        NegotiatorCallbacks {
-            proposal_channel: _proposals,
-            agreement_channel: _agreements,
-        },
-    ) = create_negotiator(config, test_dir.clone(), test_dir)
+    let negotiator = create_negotiator(config.negotiators[1].clone(), test_dir.clone(), test_dir)
         .await
         .unwrap();
 
@@ -243,35 +237,30 @@ async fn test_grpc_library_negative_calls() {
     }
 
     negotiator
-        .agreement_signed(&sample_agreement().unwrap())
+        .on_agreement_approved(&sample_agreement().unwrap())
         .await
         .unwrap_err();
 
     negotiator
-        .agreement_rejected("0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8")
-        .await
-        .unwrap_err();
-
-    negotiator
-        .agreement_finalized(
+        .on_agreement_terminated(
             "0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8",
-            AgreementResult::ClosedByUs,
+            &AgreementResult::ClosedByUs,
         )
         .await
         .unwrap_err();
 
     negotiator
-        .proposal_rejected(
+        .on_proposal_rejected(
             "0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8",
-            &None,
+            // &None,
         )
         .await
         .unwrap_err();
 
     negotiator
-        .post_agreement_event(
+        .on_agreement_event(
             "0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8",
-            AgreementEvent::InvoiceAccepted,
+            &AgreementEvent::InvoiceAccepted,
         )
         .await
         .unwrap_err();

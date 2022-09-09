@@ -1,12 +1,11 @@
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
 
-use ya_grpc_negotiator_api::plugin::{
-    NegotiationResult, NegotiatorComponentMut, NegotiatorFactoryDefault, NegotiatorMut,
-    ProposalView, Score,
+use ya_negotiator_component::static_lib::{NegotiatorFactoryDefault, NegotiatorMut};
+use ya_negotiator_component::{
+    AgreementEvent, AgreementResult, AgreementView, NegotiationResult, NegotiatorComponentMut,
+    OfferTemplate, ProposalView, Score,
 };
-use ya_grpc_negotiator_api::ya_negotiator_component::AgreementEvent;
-use ya_grpc_negotiator_api::{AgreementResult, AgreementView, OfferTemplate};
 
 #[derive(Default)]
 pub struct EmitErrors {

@@ -14,6 +14,7 @@ path = "src/main.rs"
 
 [dependencies]
 ya-grpc-negotiator-api = { path = "../../interfaces/grpc"}
+ya-testing-examples = { path = "../../testing/sample-negotiators" }
 
 actix-rt = "2.7"
 anyhow = "1"

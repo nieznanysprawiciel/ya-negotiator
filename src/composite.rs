@@ -22,7 +22,7 @@ use crate::negotiators::{
     ProposalAction, ProposalRejected, RequestAgreements,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
-use crate::{NegotiatorsPack, ProposalsCollection};
+use crate::{NegotiatorsChain, ProposalsCollection};
 
 use crate::collection::{
     CollectionConfig, CollectionType, DecideGoal, DecideReason, Feedback, FeedbackAction,
@@ -56,7 +56,7 @@ pub struct CompositeNegotiatorConfig {
 ///   To avoid this we should design internal interfaces, which will allow to combine multiple logics
 ///   as plugable components.
 pub struct Negotiator {
-    components: NegotiatorsPack,
+    components: NegotiatorsChain,
 
     proposal_channel: mpsc::UnboundedSender<ProposalAction>,
     agreement_channel: mpsc::UnboundedSender<AgreementAction>,
@@ -81,7 +81,7 @@ pub struct NegotiatorCallbacks {
 
 impl Negotiator {
     pub fn new(
-        components: NegotiatorsPack,
+        components: NegotiatorsChain,
         config: CompositeNegotiatorConfig,
     ) -> (Negotiator, NegotiatorCallbacks) {
         let (proposal_sender, proposal_receiver) = mpsc::unbounded_channel();

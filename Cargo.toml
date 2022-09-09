@@ -12,7 +12,8 @@ members = [
     "builtin-negotiators",
     "interfaces/grpc",
     "testing",
-    "examples/grpc-example"
+    "examples/grpc-example",
+    "testing/sample-negotiators"
 ]
 
 [dependencies]
@@ -43,6 +44,7 @@ actix-rt = "2.7"
 env_logger = "0.9"
 
 ya-negotiators-testing = { path = "testing" }
+ya-testing-examples = { path = "testing/sample-negotiators" }
 grpc-example = { path = "examples/grpc-example" }
 
 # Tests

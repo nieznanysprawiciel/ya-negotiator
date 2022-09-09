@@ -1,8 +1,5 @@
 use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use std::path::PathBuf;
-use test_binary::build_test_binary;
 
 use ya_agreement_utils::{
     AgreementView, InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo,
@@ -13,43 +10,10 @@ use ya_negotiators::{AgreementAction, NegotiatorCallbacks, ProposalAction};
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewDemand, Proposal};
 use ya_negotiator_component::{AgreementEvent, AgreementResult};
-use ya_negotiators_testing::{prepare_test_dir, test_assets_dir};
+use ya_negotiators_testing::{generate_id, prepare_test_dir, test_assets_dir};
+use ya_testing_examples::configs::{example_config, example_config_filter};
 
-use grpc_example_lib::emit_errors::AddError;
-
-#[derive(Serialize, Deserialize)]
-pub struct FilterNodesConfig {
-    pub names: Vec<String>,
-}
-
-fn example_config() -> NegotiatorsConfig {
-    let test_bin_path =
-        build_test_binary("grpc-example", "examples").expect("error building grpc-example");
-
-    let filter_conf = NegotiatorConfig {
-        name: "grpc-example::FilterNodes".to_string(),
-        load_mode: LoadMode::Grpc {
-            path: PathBuf::from(&test_bin_path),
-        },
-        params: serde_yaml::to_value(FilterNodesConfig {
-            names: vec!["dany".to_string()],
-        })
-        .unwrap(),
-    };
-
-    let emit_error_config = NegotiatorConfig {
-        name: "grpc-example::EmitErrors".to_string(),
-        load_mode: LoadMode::Grpc {
-            path: PathBuf::from(&test_bin_path),
-        },
-        params: serde_yaml::to_value(()).unwrap(),
-    };
-
-    NegotiatorsConfig {
-        negotiators: vec![filter_conf, emit_error_config],
-        composite: CompositeNegotiatorConfig::default_test(),
-    }
-}
+use ya_testing_examples::AddError;
 
 fn example_offer_definition() -> OfferTemplate {
     OfferDefinition {
@@ -83,7 +47,7 @@ fn proposal_from_demand(demand: &NewDemand) -> Proposal {
     Proposal {
         properties: demand.properties.clone(),
         constraints: demand.constraints.clone(),
-        proposal_id: "".to_string(),
+        proposal_id: generate_id(),
         issuer_id: Default::default(),
         state: State::Draft,
         timestamp: Utc::now(),
@@ -120,7 +84,7 @@ async fn test_grpc_library() {
     let proposal = proposal_from_demand(&demand);
 
     negotiator
-        .react_to_proposal("", &proposal, &offer)
+        .react_to_proposal("62d6b078d65c2cf8cf11fcdd0784388d31", &proposal, &offer)
         .await
         .unwrap();
 
@@ -144,7 +108,10 @@ async fn test_grpc_library() {
     }
 
     negotiator
-        .react_to_agreement("", &sample_agreement().unwrap())
+        .react_to_agreement(
+            "62d6b078d65c2cf8cf11fcdd0784388d31",
+            &sample_agreement().unwrap(),
+        )
         .await
         .unwrap();
 
@@ -208,8 +175,6 @@ async fn test_grpc_library_positive_calls() {
 /// Check if grpc correctly receives errors from negotiators.
 #[actix_rt::test]
 async fn test_grpc_library_negative_calls() {
-    env_logger::init();
-
     let config = example_config();
     let test_dir = prepare_test_dir("test_grpc_library_negative_calls").unwrap();
     let negotiator = create_negotiator(config.negotiators[1].clone(), test_dir.clone(), test_dir)
@@ -218,7 +183,6 @@ async fn test_grpc_library_negative_calls() {
 
     let errors = vec![
         "agreement_signed failed",
-        "agreement_rejected failed",
         "agreement_finalized failed",
         "proposal_rejected failed",
         "post_agreement_event failed",
@@ -264,4 +228,41 @@ async fn test_grpc_library_negative_calls() {
         )
         .await
         .unwrap_err();
+}
+
+/// Spawn 2 negotiators of the same type to ensure grpc handles this correctly.
+#[actix_rt::test]
+async fn test_2same_negotiators() {
+    env_logger::init();
+
+    let config = example_config_filter(&["dany", "nieznanysprawiciel-laptop-Requestor-1"]);
+    let test_dir = prepare_test_dir("test_grpc_library").unwrap();
+    let (
+        negotiator,
+        NegotiatorCallbacks {
+            proposal_channel: mut proposals,
+            agreement_channel: _agreements,
+        },
+    ) = create_negotiator_actor(config, test_dir.clone(), test_dir)
+        .await
+        .unwrap();
+
+    let offer = negotiator
+        .create_offer(&example_offer_definition())
+        .await
+        .unwrap();
+    let offer = proposal_from_demand(&offer);
+
+    let demand = example_demand(Utc::now() + chrono::Duration::seconds(50), "dany");
+    let proposal = proposal_from_demand(&demand);
+
+    negotiator
+        .react_to_proposal("62d6b078d65c2cf8cf11fcdd0784388d31", &proposal, &offer)
+        .await
+        .unwrap();
+
+    match proposals.recv().await {
+        Some(ProposalAction::RejectProposal { .. }) => {}
+        action => panic!("Expected reject proposal, found: {:?}", action),
+    }
 }

@@ -1,6 +1,5 @@
 use anyhow::bail;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::fs;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
@@ -12,7 +11,7 @@ use crate::Negotiator;
 use ya_grpc_negotiator_api::create_grpc_negotiator;
 use ya_negotiator_component::component::NegotiatorComponent;
 use ya_negotiator_component::static_lib::{create_static_negotiator, factory};
-use ya_negotiator_component::NegotiatorsPack;
+use ya_negotiator_component::NegotiatorsChain;
 
 use crate::builtin::AcceptAll;
 use crate::builtin::LimitExpiration;
@@ -53,7 +52,7 @@ pub async fn create_negotiator_actor(
     let components = create_negotiators(config.clone(), working_dir, plugins_dir).await?;
 
     let (negotiator, callbacks) =
-        Negotiator::new(NegotiatorsPack::with(components), config.composite);
+        Negotiator::new(NegotiatorsChain::with(components), config.composite);
     Ok((Arc::new(NegotiatorAddr::from(negotiator)), callbacks))
 }
 
@@ -98,13 +97,13 @@ pub async fn create_negotiators(
     config: NegotiatorsConfig,
     working_dir: PathBuf,
     plugins_dir: PathBuf,
-) -> anyhow::Result<HashMap<String, Box<dyn NegotiatorComponent>>> {
-    let mut components = HashMap::<String, Box<dyn NegotiatorComponent>>::new();
+) -> anyhow::Result<Vec<(String, Box<dyn NegotiatorComponent>)>> {
+    let mut components = Vec::<(String, Box<dyn NegotiatorComponent>)>::new();
     for config in config.negotiators.into_iter() {
-        components.insert(
+        components.push((
             config.name.clone(),
             create_negotiator(config, working_dir.clone(), plugins_dir.clone()).await?,
-        );
+        ));
     }
     Ok(components)
 }

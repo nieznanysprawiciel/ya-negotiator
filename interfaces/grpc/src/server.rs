@@ -3,6 +3,7 @@ use clap::Parser;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 use tonic::{transport::Server, Request, Response, Status};
 
@@ -92,7 +93,7 @@ impl NegotiatorService for GrpcNegotiatorServer {
         &self,
         request: Request<ShutdownRequest>,
     ) -> Result<Response<ShutdownResponse>, Status> {
-        let ShutdownRequest { id } = request.into_inner();
+        let ShutdownRequest { id, timeout } = request.into_inner();
 
         match { self.components.write().await.remove(&id) } {
             None => {
@@ -100,7 +101,13 @@ impl NegotiatorService for GrpcNegotiatorServer {
                     "Can't shutdown. Negotiator: {id} not found."
                 )))
             }
-            Some(wrapper) => wrapper.send(Shutdown {}).await.ok(),
+            Some(wrapper) => wrapper
+                .send(Shutdown {
+                    timeout: Duration::from_secs_f32(timeout),
+                })
+                .await
+                .map_err(|e| Status::internal(format!("Actor for {id} is stopped. {e}")))?
+                .map_err(|e| Status::ok(e.to_string()))?,
         };
 
         Ok(Response::new(ShutdownResponse {}))

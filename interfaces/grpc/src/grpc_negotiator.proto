@@ -23,6 +23,7 @@ message CreateNegotiatorResponse {
 
 message ShutdownRequest {
   string id = 1;
+  float timeout = 2;
 }
 
 message ShutdownResponse {}

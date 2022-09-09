@@ -1,8 +1,10 @@
 use anyhow::anyhow;
 use async_trait::async_trait;
+use futures::{FutureExt, TryFutureExt};
 use regex::Regex;
 use std::collections::HashMap;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::RwLock;
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
@@ -246,6 +248,32 @@ impl NegotiatorComponent for NegotiatorsChain {
             None => Ok(serde_json::Value::Null),
             Some(negotiator) => negotiator.control_event(component, params).await,
         }
+    }
+
+    /// Requests shutdown from all subcomponents (asynchronously).
+    /// Doesn't enforce timeout and passes it's value further unchanged.
+    /// Doesn't return error, only logs warnings in case of failures.
+    async fn shutdown(&self, timeout: Duration) -> anyhow::Result<()> {
+        let shutdown_futures = self
+            .inner
+            .read()
+            .await
+            .iter()
+            .map(|(name, negotiator)| {
+                let name = name.to_string();
+                async move {
+                    negotiator
+                        .shutdown(timeout)
+                        .map_err(|e| log::warn!("Negotiator: {name} failed shutting down: {e}"))
+                        .await
+                        .ok();
+                }
+                .boxed_local()
+            })
+            .collect::<Vec<_>>();
+
+        futures::future::join_all(shutdown_futures).await;
+        Ok(())
     }
 }
 

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::reason::RejectReason;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
@@ -172,5 +173,12 @@ pub trait NegotiatorComponent {
         _params: serde_json::Value,
     ) -> anyhow::Result<serde_json::Value> {
         Ok(serde_json::Value::Null)
+    }
+
+    /// Free all used resources.
+    /// Negotiator must be ready before `timeout`, otherwise future returned by this
+    /// function will be dropped.
+    async fn shutdown(&self, _timeout: Duration) -> anyhow::Result<()> {
+        Ok(())
     }
 }

@@ -1,5 +1,6 @@
 use async_trait::async_trait;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::Mutex;
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
@@ -14,6 +15,9 @@ pub struct ComponentMutWrapper<N: NegotiatorComponentMut + Sized> {
 /// Mutable version of negotiator component. It simplifies implementation in case someone
 /// doesn't need asynchronous execution, but requires access to `&mut self`.
 /// By using this trait you can avoid necessary synchronization, which is handled externally.
+///
+/// Remember that negotiators are ran in asynchronous environment, so you are not allowed
+/// to do any heavy computational work here, that could block executor.
 pub trait NegotiatorComponentMut {
     /// Check documentation for `NegotiatorComponent::negotiate_step`.
     fn negotiate_step(
@@ -68,6 +72,11 @@ pub trait NegotiatorComponentMut {
         _params: serde_json::Value,
     ) -> anyhow::Result<serde_json::Value> {
         Ok(serde_json::Value::Null)
+    }
+
+    /// Check documentation for `NegotiatorComponent::shutdown`.
+    fn shutdown(&mut self, _timeout: Duration) -> anyhow::Result<()> {
+        Ok(())
     }
 }
 
@@ -128,6 +137,10 @@ where
         params: serde_json::Value,
     ) -> anyhow::Result<serde_json::Value> {
         self.inner.lock().await.control_event(component, params)
+    }
+
+    async fn shutdown(&self, timeout: Duration) -> anyhow::Result<()> {
+        self.inner.lock().await.shutdown(timeout)
     }
 }
 

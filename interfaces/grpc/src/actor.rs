@@ -3,13 +3,16 @@ use futures::FutureExt;
 use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use std::sync::Arc;
+use std::time::Duration;
 
 use crate::message::{NegotiationMessage, NegotiationResponse};
 use ya_negotiator_component::NegotiatorComponent;
 
 #[derive(Message, Clone, Debug)]
 #[rtype(result = "anyhow::Result<()>")]
-pub struct Shutdown {}
+pub struct Shutdown {
+    pub(crate) timeout: Duration,
+}
 
 /// Responsible for handling messages to single specific Negotiator.
 /// This is adapter between `Send` GrpcNegotiatorServer and `?Send` `NegotiatorComponent`.
@@ -82,11 +85,11 @@ impl Handler<NegotiationMessage> for NegotiatorWrapper {
 }
 
 impl Handler<Shutdown> for NegotiatorWrapper {
-    type Result = anyhow::Result<()>;
+    type Result = ResponseFuture<anyhow::Result<()>>;
 
-    fn handle(&mut self, _: Shutdown, ctx: &mut Self::Context) -> Self::Result {
-        ctx.stop();
-        Ok(())
+    fn handle(&mut self, msg: Shutdown, _ctx: &mut Self::Context) -> Self::Result {
+        let negotiator = self.negotiator.clone();
+        async move { Ok(negotiator.shutdown(msg.timeout).await?) }.boxed_local()
     }
 }
 

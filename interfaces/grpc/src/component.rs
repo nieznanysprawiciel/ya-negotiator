@@ -1,9 +1,10 @@
 use anyhow::{anyhow, bail};
 use serde_yaml;
 use std::path::PathBuf;
+use std::time::Duration;
 use tonic::Code;
 
-use crate::grpc::{CallNegotiatorRequest, CreateNegotiatorRequest};
+use crate::grpc::{CallNegotiatorRequest, CreateNegotiatorRequest, ShutdownRequest};
 
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
 use ya_negotiator_component::component::{NegotiationResult, NegotiatorComponent, Score};
@@ -179,5 +180,19 @@ impl NegotiatorComponent for GRPCComponent {
             NegotiationResponse::Generic(value) => Ok(value),
             _ => bail!("Unexpected `NegotiationResponse` type."),
         }
+    }
+
+    async fn shutdown(&self, timeout: Duration) -> anyhow::Result<()> {
+        let mut client = self.client.clone();
+        let request = tonic::Request::new(ShutdownRequest {
+            id: self.id.clone(),
+            timeout: timeout.as_secs_f32(),
+        });
+
+        client
+            .shutdown_negotiator(request)
+            .await
+            .map_err(|e| anyhow!("GRPC: Failed to shutdown negotiator: {e}"))?;
+        Ok(())
     }
 }

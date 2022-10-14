@@ -1,0 +1,35 @@
+[package]
+name = "ya-grpc-negotiator-api"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ya-agreement-utils = { path = "../../agreement-utils" }
+ya-negotiator-component = { path = "../../negotiator-component" }
+ya-client-model = "0.4"
+
+actix = "0.13"
+actix_derive = "0.6"
+async-trait = "0.1.57"
+anyhow = "1.0"
+clap = { version = "3", features = ["derive", "env"] }
+derive_more = "0.99"
+futures = "0.3"
+lazy_static = "1.4"
+log = "0.4"
+serde = "1.0"
+serde_json = "1.0"
+serde_yaml = "0.9"
+portpicker = "0.1"
+prost = "0.11"
+rand = "0.8"
+thiserror = "1.0"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "process"] }
+tonic = "0.8"
+
+[build-dependencies]
+tonic-build = "0.8"
+protobuf-src = "1"
+
+[dev-dependencies]
+actix-rt = "2.7"

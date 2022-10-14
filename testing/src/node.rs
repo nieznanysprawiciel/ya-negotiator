@@ -11,7 +11,7 @@ use ya_client_model::market::agreement::State as AgreementState;
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{Agreement, Demand, DemandOfferBase, Offer, Proposal};
 use ya_client_model::NodeId;
-use ya_negotiators::factory::{create_negotiator, NegotiatorsConfig};
+use ya_negotiators::factory::{create_negotiator_actor, NegotiatorsConfig};
 use ya_negotiators::{
     AgreementAction, AgreementResult, NegotiatorAddr, NegotiatorCallbacks, ProposalAction,
 };
@@ -32,7 +32,7 @@ pub struct Node {
 }
 
 impl Node {
-    pub fn new(
+    pub async fn new(
         config: NegotiatorsConfig,
         node_type: NodeType,
         name: Option<String>,
@@ -42,7 +42,8 @@ impl Node {
         let name = name.unwrap_or(node_id.to_string());
         let working_dir = working_dir.join(&name);
 
-        let (negotiator, callbacks) = create_negotiator(config, working_dir.clone(), working_dir)?;
+        let (negotiator, callbacks) =
+            create_negotiator_actor(config, working_dir.clone(), working_dir).await?;
 
         let (agreement_sender, _) = broadcast::channel(16);
         let (proposal_sender, _) = broadcast::channel(16);

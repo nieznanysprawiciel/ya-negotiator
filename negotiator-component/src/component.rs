@@ -1,4 +1,6 @@
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use crate::reason::RejectReason;
 use ya_agreement_utils::{AgreementView, OfferTemplate, ProposalView};
@@ -98,18 +100,19 @@ pub enum AgreementEvent {
 /// components, that are able to negotiate this specification.
 /// It would be useful to have `NegotiatorComponents`, that can be loaded from shared library
 /// or can communicate with negotiation logic in external process (maybe RPC or TCP??).
+#[async_trait(?Send)]
 pub trait NegotiatorComponent {
     /// Push forward negotiations as far as you can. Evaluate Proposal.
     /// `NegotiatorComponent` should modify only properties in his responsibility
     /// and return remaining part of Proposal unchanged.
     ///
     /// Parameters:
-    /// incoming_proposal - Proposal that we got from other party.
+    /// their    - Proposal that we got from other party.
     /// template - First component gets Proposal from previous negotiations. All subsequent
     ///            components change this Proposal and than it is passed to next component
     ///            in modified shape.
-    fn negotiate_step(
-        &mut self,
+    async fn negotiate_step(
+        &self,
         _their: &ProposalView,
         template: ProposalView,
         score: Score,
@@ -122,14 +125,14 @@ pub trait NegotiatorComponent {
 
     /// Called during Offer/Demand creation. `NegotiatorComponent` should add properties
     /// and constraints for which it is responsible during future negotiations.
-    fn fill_template(&mut self, template: OfferTemplate) -> anyhow::Result<OfferTemplate> {
+    async fn fill_template(&self, template: OfferTemplate) -> anyhow::Result<OfferTemplate> {
         Ok(template)
     }
 
     /// Called when Agreement was finished. `NegotiatorComponent` can use termination
     /// result to adjust his future negotiation strategy.
-    fn on_agreement_terminated(
-        &mut self,
+    async fn on_agreement_terminated(
+        &self,
         _agreement_id: &str,
         _result: &AgreementResult,
     ) -> anyhow::Result<()> {
@@ -139,7 +142,7 @@ pub trait NegotiatorComponent {
     /// Called when Negotiator decided to approve/propose Agreement. It's only notification,
     /// `NegotiatorComponent` can't reject Agreement anymore.
     /// TODO: Can negotiator find out from which Proposals is this Agreement created??
-    fn on_agreement_approved(&mut self, _agreement: &AgreementView) -> anyhow::Result<()> {
+    async fn on_agreement_approved(&self, _agreement: &AgreementView) -> anyhow::Result<()> {
         Ok(())
     }
 
@@ -147,14 +150,14 @@ pub trait NegotiatorComponent {
     /// TODO: We should call this, if any of our components rejected Proposal either.
     ///       Add flag that will indicate who rejected.
     /// TODO: Add Reason parameter.
-    fn on_proposal_rejected(&mut self, _proposal_id: &str) -> anyhow::Result<()> {
+    async fn on_proposal_rejected(&self, _proposal_id: &str) -> anyhow::Result<()> {
         Ok(())
     }
 
     /// Notifies `NegotiatorComponent`, about events related to Agreement appearing after
     /// it's termination.
-    fn on_agreement_event(
-        &mut self,
+    async fn on_agreement_event(
+        &self,
         _agreement_id: &str,
         _event: &AgreementEvent,
     ) -> anyhow::Result<()> {
@@ -164,11 +167,18 @@ pub trait NegotiatorComponent {
     /// Allows to control `NegotiatorComponent's` behavior or query any information
     /// from it. Thanks to this event Requestor/Provider implementation can interact with
     /// `NegotiatorComponents`.
-    fn control_event(
-        &mut self,
+    async fn control_event(
+        &self,
         _component: &str,
         _params: serde_json::Value,
     ) -> anyhow::Result<serde_json::Value> {
         Ok(serde_json::Value::Null)
+    }
+
+    /// Free all used resources.
+    /// Negotiator must be ready before `timeout`, otherwise future returned by this
+    /// function will be dropped.
+    async fn shutdown(&self, _timeout: Duration) -> anyhow::Result<()> {
+        Ok(())
     }
 }

@@ -90,7 +90,9 @@ async fn test_static_library() {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config, test_dir.clone(), test_dir).unwrap();
+    ) = create_negotiator_actor(config, test_dir.clone(), test_dir)
+        .await
+        .unwrap();
 
     let offer = negotiator.create_offer(&example_offer()).await.unwrap();
     let offer = proposal_from_demand(&offer);

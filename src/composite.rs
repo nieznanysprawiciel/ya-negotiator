@@ -1,6 +1,10 @@
-use actix::{Actor, Context, Handler, StreamHandler};
+use actix::{
+    Actor, ActorFutureExt, ActorResponse, Context, Handler, ResponseFuture, StreamHandler,
+    WrapFuture,
+};
 use anyhow::anyhow;
 use futures::stream::select;
+use futures::FutureExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -18,7 +22,7 @@ use crate::negotiators::{
     ProposalAction, ProposalRejected, RequestAgreements,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
-use crate::{NegotiatorsPack, ProposalsCollection};
+use crate::{NegotiatorsChain, ProposalsCollection};
 
 use crate::collection::{
     CollectionConfig, CollectionType, DecideGoal, DecideReason, Feedback, FeedbackAction,
@@ -52,7 +56,7 @@ pub struct CompositeNegotiatorConfig {
 ///   To avoid this we should design internal interfaces, which will allow to combine multiple logics
 ///   as plugable components.
 pub struct Negotiator {
-    components: NegotiatorsPack,
+    components: NegotiatorsChain,
 
     proposal_channel: mpsc::UnboundedSender<ProposalAction>,
     agreement_channel: mpsc::UnboundedSender<AgreementAction>,
@@ -77,7 +81,7 @@ pub struct NegotiatorCallbacks {
 
 impl Negotiator {
     pub fn new(
-        components: NegotiatorsPack,
+        components: NegotiatorsChain,
         config: CompositeNegotiatorConfig,
     ) -> (Negotiator, NegotiatorCallbacks) {
         let (proposal_sender, proposal_receiver) = mpsc::unbounded_channel();
@@ -103,19 +107,23 @@ impl Negotiator {
 }
 
 impl Handler<CreateOffer> for Negotiator {
-    type Result = anyhow::Result<NewOffer>;
+    type Result = ResponseFuture<anyhow::Result<NewOffer>>;
 
     fn handle(&mut self, msg: CreateOffer, _: &mut Context<Self>) -> Self::Result {
-        let offer_template = self.components.fill_template(msg.offer_template)?;
-        Ok(NewOffer::new(
-            offer_template.properties,
-            offer_template.constraints,
-        ))
+        let components = self.components.clone();
+        async move {
+            let offer_template = components.fill_template(msg.offer_template).await?;
+            Ok(NewOffer::new(
+                offer_template.properties,
+                offer_template.constraints,
+            ))
+        }
+        .boxed_local()
     }
 }
 
 impl Handler<ReactToProposal> for Negotiator {
-    type Result = anyhow::Result<()>;
+    type Result = ActorResponse<Self, Result<(), anyhow::Error>>;
 
     fn handle(&mut self, msg: ReactToProposal, _: &mut Context<Self>) -> Self::Result {
         log::debug!(
@@ -129,26 +137,47 @@ impl Handler<ReactToProposal> for Negotiator {
             msg.subscription_id.clone(),
         );
 
-        let their = ProposalView::try_from(&msg.incoming_proposal)?;
-        let template = ProposalView {
-            content: OfferTemplate {
-                properties: expand(msg.our_prev_proposal.properties),
-                constraints: msg.our_prev_proposal.constraints,
-            },
-            id: msg.our_prev_proposal.proposal_id,
-            issuer: msg.our_prev_proposal.issuer_id,
-            state: msg.our_prev_proposal.state,
-            timestamp: msg.our_prev_proposal.timestamp,
-        };
+        let components = self.components.clone();
+        let subscription_id = msg.subscription_id.clone();
+        let their = ProposalView::try_from(&msg.incoming_proposal);
 
-        let result = self
-            .components
-            .negotiate_step(&their, template, Score::default())?;
+        let future = async move {
+            let their = ProposalView::try_from(&msg.incoming_proposal)?;
+            let template = ProposalView {
+                content: OfferTemplate {
+                    properties: expand(msg.our_prev_proposal.properties),
+                    constraints: msg.our_prev_proposal.constraints,
+                },
+                id: msg.our_prev_proposal.proposal_id,
+                issuer: msg.our_prev_proposal.issuer_id,
+                state: msg.our_prev_proposal.state,
+                timestamp: msg.our_prev_proposal.timestamp,
+            };
 
-        match result {
+            components
+                .negotiate_step(&their, template, Score::default())
+                .await
+        }
+        .into_actor(self)
+        .map(move |result: Result<_, anyhow::Error>, this, _| {
+            this.process_proposal_result(result, subscription_id, their?)
+        });
+
+        ActorResponse::r#async(future)
+    }
+}
+
+impl Negotiator {
+    fn process_proposal_result(
+        &mut self,
+        result: anyhow::Result<NegotiationResult>,
+        subscription_id: String,
+        their: ProposalView,
+    ) -> anyhow::Result<()> {
+        match result? {
             NegotiationResult::Reject { reason, is_final } => {
                 self.proposal_channel.send(ProposalAction::RejectProposal {
-                    subscription_id: msg.subscription_id,
+                    subscription_id,
                     id: their.id.clone(),
                     reason: reason.final_flag(is_final).into(),
                 })?;
@@ -162,7 +191,7 @@ impl Handler<ReactToProposal> for Negotiator {
                     // ProposalsCollection should store only fully negotiated Proposals.
                     self.proposal_channel
                         .send(ProposalAction::CounterProposal {
-                            subscription_id: msg.subscription_id,
+                            subscription_id,
                             id: their.id.clone(),
                             proposal: our.into(),
                         })?;
@@ -179,16 +208,57 @@ impl Handler<ReactToProposal> for Negotiator {
                     )?;
                 }
                 _ => {
-                    log::warn!("Invalid Proposal [{}] state {:?}", their.id, their.state)
+                    log::warn!("Invalid Proposal [{}] state {:?}", their.id, their.state);
                 }
             },
-
             NegotiationResult::Negotiating { proposal: our, .. } => {
                 self.proposal_channel
                     .send(ProposalAction::CounterProposal {
-                        subscription_id: msg.subscription_id,
+                        subscription_id,
                         id: their.id.clone(),
                         proposal: our.into(),
+                    })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn process_agreement_result(
+        &mut self,
+        result: anyhow::Result<NegotiationResult>,
+        subscription_id: String,
+        agreement_id: String,
+        their: ProposalView,
+    ) -> anyhow::Result<()> {
+        // We expect that all `NegotiatorComponents` should return ready state.
+        // Otherwise we must reject Agreement proposals, because negotiations weren't finished.
+        match result? {
+            NegotiationResult::Ready { proposal, score } => {
+                self.agreements.new_scored(
+                    ProposalScore {
+                        their,
+                        our: proposal,
+                        score: score.pointer_typed("/final-score").unwrap_or(0.0),
+                    },
+                    &agreement_id,
+                )?;
+            }
+            NegotiationResult::Reject { reason, is_final } => {
+                self.agreement_channel
+                    .send(AgreementAction::RejectAgreement {
+                        id: agreement_id,
+                        subscription_id,
+                        reason: reason.final_flag(is_final).into(),
+                    })?;
+            }
+            NegotiationResult::Negotiating { .. } => {
+                self.agreement_channel
+                    .send(AgreementAction::RejectAgreement {
+                        id: agreement_id,
+                        subscription_id,
+                        reason: RejectReason::new("Negotiations aren't finished.")
+                            .final_flag(true)
+                            .into(),
                     })?;
             }
         }
@@ -239,18 +309,23 @@ pub fn to_proposal_views(
 }
 
 impl Handler<ReactToAgreement> for Negotiator {
-    type Result = anyhow::Result<()>;
+    type Result = ActorResponse<Self, Result<(), anyhow::Error>>;
 
     fn handle(&mut self, msg: ReactToAgreement, _: &mut Context<Self>) -> Self::Result {
         log::debug!("Reacting to Agreement [{}]", msg.agreement.id);
 
+        let components = self.components.clone();
+        let subscription_id = msg.subscription_id.clone();
         let agreement_id = msg.agreement.id.clone();
-        let (their, our) = to_proposal_views(msg.agreement.clone()).map_err(|e| {
-            anyhow!(
-                "Negotiator failed to extract Proposals from Agreement. {}",
-                e
-            )
-        })?;
+
+        let (their, our) = match to_proposal_views(msg.agreement) {
+            Ok(result) => result,
+            Err(e) => {
+                return ActorResponse::reply(Err(anyhow!(
+                    "Negotiator failed to extract Proposals from Agreement. {e}"
+                )))
+            }
+        };
 
         self.proposal_agreement
             .insert(their.id.clone(), agreement_id.clone());
@@ -258,61 +333,43 @@ impl Handler<ReactToAgreement> for Negotiator {
             .insert(our.id.clone(), agreement_id.clone());
 
         self.subscriptions
-            .insert(msg.agreement.id.clone(), msg.subscription_id.clone());
+            .insert(agreement_id.clone(), subscription_id.clone());
 
-        // We expect that all `NegotiatorComponents` should return ready state.
-        // Otherwise we must reject Agreement proposals, because negotiations weren't finished.
-        match self
-            .components
-            .negotiate_step(&their, our, Score::default())?
-        {
-            NegotiationResult::Ready { proposal, score } => {
-                self.agreements.new_scored(
-                    ProposalScore {
-                        their,
-                        our: proposal,
-                        score: score.pointer_typed("/final-score").unwrap_or(0.0),
-                    },
-                    &agreement_id,
-                )?;
-            }
-            NegotiationResult::Reject { reason, is_final } => {
-                self.agreement_channel
-                    .send(AgreementAction::RejectAgreement {
-                        id: agreement_id,
-                        subscription_id: msg.subscription_id,
-                        reason: reason.final_flag(is_final).into(),
-                    })?;
-            }
-            NegotiationResult::Negotiating { .. } => {
-                self.agreement_channel
-                    .send(AgreementAction::RejectAgreement {
-                        id: agreement_id,
-                        subscription_id: msg.subscription_id,
-                        reason: RejectReason::new("Negotiations aren't finished.")
-                            .final_flag(true)
-                            .into(),
-                    })?;
-            }
+        let their2 = their.clone();
+        let future = async move {
+            components
+                .negotiate_step(&their2, our, Score::default())
+                .await
         }
-        Ok(())
+        .into_actor(self)
+        .map(move |result: Result<_, anyhow::Error>, this, _| {
+            this.process_agreement_result(result, subscription_id, agreement_id, their)
+        });
+
+        ActorResponse::r#async(future)
     }
 }
 
 impl Handler<AgreementSigned> for Negotiator {
-    type Result = anyhow::Result<()>;
+    type Result = ResponseFuture<anyhow::Result<()>>;
 
     fn handle(&mut self, msg: AgreementSigned, _: &mut Context<Self>) -> Self::Result {
-        self.components.on_agreement_approved(&msg.agreement)
+        let components = self.components.clone();
+        async move { components.on_agreement_approved(&msg.agreement).await }.boxed_local()
     }
 }
 
 impl Handler<AgreementFinalized> for Negotiator {
-    type Result = anyhow::Result<()>;
+    type Result = ResponseFuture<anyhow::Result<()>>;
 
     fn handle(&mut self, msg: AgreementFinalized, _: &mut Context<Self>) -> Self::Result {
-        self.components
-            .on_agreement_terminated(&msg.agreement_id, &msg.result)
+        let components = self.components.clone();
+        async move {
+            components
+                .on_agreement_terminated(&msg.agreement_id, &msg.result)
+                .await
+        }
+        .boxed_local()
     }
 }
 
@@ -330,28 +387,35 @@ impl Handler<AgreementRejected> for Negotiator {
 }
 
 impl Handler<ProposalRejected> for Negotiator {
-    type Result = anyhow::Result<()>;
+    type Result = ResponseFuture<anyhow::Result<()>>;
 
     fn handle(&mut self, msg: ProposalRejected, _: &mut Context<Self>) -> Self::Result {
         // TODO: Pass reason to components.
-        self.components.on_proposal_rejected(&msg.proposal_id)
+        let components = self.components.clone();
+        async move { components.on_proposal_rejected(&msg.proposal_id).await }.boxed_local()
     }
 }
 
 impl Handler<PostAgreementEvent> for Negotiator {
-    type Result = anyhow::Result<()>;
+    type Result = ResponseFuture<anyhow::Result<()>>;
 
     fn handle(&mut self, msg: PostAgreementEvent, _: &mut Context<Self>) -> Self::Result {
-        self.components
-            .on_agreement_event(&msg.agreement_id, &msg.event)
+        let components = self.components.clone();
+        async move {
+            components
+                .on_agreement_event(&msg.agreement_id, &msg.event)
+                .await
+        }
+        .boxed_local()
     }
 }
 
 impl Handler<ControlEvent> for Negotiator {
-    type Result = anyhow::Result<serde_json::Value>;
+    type Result = ResponseFuture<anyhow::Result<serde_json::Value>>;
 
     fn handle(&mut self, msg: ControlEvent, _: &mut Context<Self>) -> Self::Result {
-        self.components.control_event(&msg.component, msg.params)
+        let components = self.components.clone();
+        async move { components.control_event(&msg.component, msg.params).await }.boxed_local()
     }
 }
 

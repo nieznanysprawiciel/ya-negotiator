@@ -1,0 +1,38 @@
+syntax = "proto3";
+package grpc_negotiator;
+
+
+/// Main service responsible for creation of negotiators and managing their lifetime.
+service NegotiatorService {
+  /// Creates negotiator and returns it's id.
+  rpc CreateNegotiator(CreateNegotiatorRequest) returns (CreateNegotiatorResponse);
+  rpc ShutdownNegotiator(ShutdownRequest) returns (ShutdownResponse);
+  rpc CallNegotiator(CallNegotiatorRequest) returns (CallNegotiatorResponse);
+}
+
+
+message CreateNegotiatorRequest {
+  string name = 1;
+  string params = 2;
+  string workdir = 3;
+}
+
+message CreateNegotiatorResponse {
+  string id = 1;
+}
+
+message ShutdownRequest {
+  string id = 1;
+  float timeout = 2;
+}
+
+message ShutdownResponse {}
+
+message CallNegotiatorRequest {
+  string id = 1;
+  string message = 2;
+}
+
+message CallNegotiatorResponse {
+  string response = 1;
+}

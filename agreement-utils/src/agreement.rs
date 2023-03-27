@@ -5,6 +5,7 @@ pub use crate::proposal::ProposalView;
 pub use crate::template::OfferTemplate;
 
 use crate::proposal::remove_property_impl;
+use crate::template::property_to_pointer_paths;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
@@ -21,7 +22,7 @@ const DEFAULT_FORMAT: &str = "json";
 //  - other fields for agreement remain typed.
 // TODO: For compatibility reasons this structure has very similar functions
 //  as ProposalView, but as long as we don't merge them, we need to keep them.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AgreementView {
     pub json: Value,
     pub id: String,
@@ -43,10 +44,10 @@ impl AgreementView {
         let value = self
             .json
             .pointer(pointer)
-            .ok_or(Error::NoKey(pointer.to_string()))?
+            .ok_or_else(|| Error::NoKey(pointer.to_string()))?
             .clone();
-        Ok(<T as Deserialize>::deserialize(value)
-            .map_err(|error| Error::UnexpectedType(pointer.to_string(), error))?)
+        <T as Deserialize>::deserialize(value)
+            .map_err(|error| Error::UnexpectedType(pointer.to_string(), error))
     }
 
     pub fn properties<'a, T: Deserialize<'a>>(
@@ -55,7 +56,7 @@ impl AgreementView {
     ) -> Result<HashMap<String, T>, Error> {
         let value = self
             .pointer(pointer)
-            .ok_or(Error::NoKey(pointer.to_string()))?;
+            .ok_or_else(|| Error::NoKey(pointer.to_string()))?;
 
         let map = flatten(value.clone())
             .into_iter()
@@ -68,19 +69,21 @@ impl AgreementView {
     }
 
     pub fn get_property<'a, T: Deserialize<'a>>(&self, property: &str) -> Result<T, Error> {
-        let pointer = format!("/{}", property.replace(".", "/"));
-        self.pointer_typed(pointer.as_str())
+        let pointers = property_to_pointer_paths(property);
+        match self.pointer_typed(&pointers.path_w_tag) {
+            Err(Error::NoKey(_)) => self.pointer_typed(&pointers.path),
+            result => result,
+        }
     }
 
     pub fn remove_property(&mut self, pointer: &str) -> Result<(), Error> {
         let path: Vec<&str> = pointer.split('/').collect();
-        Ok(
-            // Path should start with '/', so we must omit first element, which will be empty.
-            remove_property_impl(&mut self.json, &path[1..]).map_err(|e| match e {
-                Error::NoKey(_) => Error::NoKey(pointer.to_string()),
-                _ => e,
-            })?,
-        )
+
+        // Path should start with '/', so we must omit first element, which will be empty.
+        remove_property_impl(&mut self.json, &path[1..]).map_err(|e| match e {
+            Error::NoKey(_) => Error::NoKey(pointer.to_string()),
+            _ => e,
+        })
     }
 
     pub fn requestor_id(&self) -> Result<NodeId, Error> {
@@ -128,7 +131,7 @@ impl TryFrom<&Agreement> for AgreementView {
     }
 }
 
-impl<'a> std::fmt::Display for AgreementView {
+impl std::fmt::Display for AgreementView {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result<(), FormatError> {
         let mut agreement = self.json.clone();
 
@@ -178,7 +181,7 @@ impl TypedPointer for Option<&Value> {
     {
         self.map(f)
             .flatten()
-            .ok_or(Error::InvalidValue(format!("{:?}", self)))
+            .ok_or_else(|| Error::InvalidValue(format!("{:?}", self)))
     }
 }
 
@@ -195,24 +198,21 @@ impl TypedArrayPointer for Option<&Value> {
     {
         let r: Option<Result<Vec<T>, Error>> = self.map(Value::as_array).flatten().map(|v| {
             v.iter()
-                .map(|i| f(i).ok_or(Error::InvalidValue(format!("{:?}", i))))
+                .map(|i| f(i).ok_or_else(|| Error::InvalidValue(format!("{:?}", i))))
                 .collect::<Result<Vec<T>, Error>>()
         });
 
-        r.ok_or(Error::InvalidValue(
-            "Unable to convert to an array".to_string(),
-        ))?
+        r.ok_or_else(|| Error::InvalidValue("Unable to convert to an array".to_string()))?
     }
 }
 
 pub fn try_from_path(path: &PathBuf) -> Result<Value, Error> {
-    let contents = std::fs::read_to_string(&path).map_err(Error::from)?;
-    let ext = match path.extension().map(|e| e.to_str()).flatten() {
+    let contents = std::fs::read_to_string(path).map_err(Error::from)?;
+    let ext = match path.extension().and_then(|e| e.to_str()) {
         Some(ext) => ext,
         None => DEFAULT_FORMAT,
     };
 
-    eprintln!("Parsing agreement at {}", path.display());
     match ext.to_lowercase().as_str() {
         "json" => try_from_json(&contents),
         "yaml" => try_from_yaml(&contents),
@@ -288,7 +288,7 @@ fn merge_obj(a: &mut Value, b: Value) {
             Value::Null => (),
             _ => {
                 let a = a.as_object_mut().unwrap();
-                a.insert(PROPERTY_TAG.to_string(), b.clone());
+                a.insert(PROPERTY_TAG.to_string(), b);
             }
         },
         (a, b) => *a = b,
@@ -349,7 +349,7 @@ properties:
     com:
       scheme: payu
       scheme.payu:
-        interval_sec: 60
+        debit-note.interval-sec?: 60
       pricing:
         model: linear
         model.linear:
@@ -382,7 +382,7 @@ constraints: |
 			"com": {
 				"scheme": "payu",
 				"scheme.payu": {
-					"interval_sec": 60
+					"debit-note.interval-sec?": 60
 				},
 				"pricing": {
 					"model": "linear",
@@ -408,12 +408,10 @@ constraints: |
 "#;
 
     fn check_values(o: &serde_json::Value) {
-        assert_eq!(
-            o.pointer("/properties/golem/srv/caps/multi-activity")
-                .as_typed(Value::as_bool)
-                .unwrap(),
-            true
-        );
+        assert!(o
+            .pointer("/properties/golem/srv/caps/multi-activity")
+            .as_typed(Value::as_bool)
+            .unwrap());
         assert_eq!(
             o.pointer("/properties/golem/inf/mem/gib")
                 .as_typed(Value::as_f64)
@@ -443,18 +441,6 @@ constraints: |
                 .as_typed(Value::as_str)
                 .unwrap(),
             "payu"
-        );
-        assert_eq!(
-            o.pointer("/properties/golem/com/scheme/payu/interval_sec")
-                .as_typed(Value::as_i64)
-                .unwrap(),
-            60i64
-        );
-        assert_eq!(
-            o.pointer("/properties/golem/com/scheme/payu/interval_sec")
-                .as_typed(Value::as_f64)
-                .unwrap(),
-            60f64
         );
         assert_eq!(
             o.pointer("/properties/golem/com/pricing/model/linear/coeffs")

@@ -6,7 +6,7 @@ use ya_client_model::market::Reason;
 
 /// Helper structure providing functionalities to build `Reason`
 /// in case of rejecting Agreement/Proposal.  
-#[derive(Clone, Display, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Display, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[display(fmt = "'{}'", message)]
 pub struct RejectReason {
     pub message: String,

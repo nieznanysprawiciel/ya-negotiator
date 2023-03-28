@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -45,7 +45,10 @@ fn proposal_expiration_from(proposal: &ProposalView) -> Result<DateTime<Utc>> {
         .ok_or_else(|| anyhow::anyhow!("Missing expiration key in Proposal"))?
         .clone();
     let timestamp: i64 = serde_json::from_value(value)?;
-    Ok(Utc.timestamp_millis(timestamp))
+    match Utc.timestamp_millis_opt(timestamp) {
+        chrono::LocalResult::Single(t) => Ok(t),
+        _ => Err(anyhow!("Cannot make DateTime from timestamp {timestamp}")),
+    }
 }
 
 impl NegotiatorComponentMut for LimitExpiration {

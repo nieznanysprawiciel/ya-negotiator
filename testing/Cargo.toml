@@ -10,7 +10,7 @@ ya-negotiator-component = { path = "../negotiator-component" }
 ya-builtin-negotiators = { path = "../builtin-negotiators" }
 ya-negotiators = { path = "../" }
 
-ya-client-model = "0.4"
+ya-client-model = "0.5"
 
 actix = { version = "0.13" }
 anyhow = "1.0"

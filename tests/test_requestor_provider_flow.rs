@@ -1,10 +1,11 @@
 use chrono::{DateTime, Duration, Utc};
 
-use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
+use ya_agreement_utils::OfferTemplate;
 use ya_builtin_negotiators::*;
 use ya_negotiators::factory::*;
 use ya_negotiators::AgreementResult;
 use ya_negotiators_testing::Framework;
+use ya_testing_examples::{InfNodeInfo, NodeInfo, OfferDefinition, ServiceInfo};
 
 fn example_config() -> NegotiatorsConfig {
     let expiration_conf = NegotiatorConfig {

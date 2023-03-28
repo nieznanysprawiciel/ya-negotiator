@@ -1,19 +1,16 @@
 use chrono::{DateTime, Utc};
 use std::convert::TryFrom;
 
-use ya_agreement_utils::{
-    AgreementView, InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo,
-};
+use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_negotiators::factory::*;
 use ya_negotiators::{AgreementAction, NegotiatorCallbacks, ProposalAction};
+use ya_testing_examples::configs::{example_config, example_config_filter};
+use ya_testing_examples::{AddError, InfNodeInfo, NodeInfo, OfferDefinition, ServiceInfo};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::{NewDemand, Proposal};
 use ya_negotiator_component::{AgreementEvent, AgreementResult};
 use ya_negotiators_testing::{generate_id, prepare_test_dir, test_assets_dir};
-use ya_testing_examples::configs::{example_config, example_config_filter};
-
-use ya_testing_examples::AddError;
 
 fn example_offer_definition() -> OfferTemplate {
     OfferDefinition {

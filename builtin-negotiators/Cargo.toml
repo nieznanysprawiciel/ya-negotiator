@@ -5,7 +5,7 @@ authors = ["nieznany.sprawiciel <witek@golem.network>"]
 edition = "2018"
 
 [dependencies]
-ya-client-model = "0.4"
+ya-client-model = "0.5"
 ya-agreement-utils = { path = "../agreement-utils" }
 ya-negotiator-component = { path = "../negotiator-component" }
 

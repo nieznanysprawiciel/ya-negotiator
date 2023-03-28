@@ -1,14 +1,15 @@
 use chrono::{DateTime, Utc};
 
-use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
+use ya_agreement_utils::OfferTemplate;
 use ya_builtin_negotiators::*;
 use ya_negotiators::factory::*;
 use ya_negotiators::{NegotiatorCallbacks, ProposalAction};
+use ya_negotiators_testing::prepare_test_dir;
+use ya_testing_examples::{InfNodeInfo, NodeInfo, OfferDefinition, ServiceInfo};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::NewDemand;
 use ya_client_model::market::Proposal;
-use ya_negotiators_testing::prepare_test_dir;
 
 fn example_config() -> NegotiatorsConfig {
     let expiration_conf = NegotiatorConfig {

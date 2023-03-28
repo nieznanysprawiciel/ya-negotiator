@@ -24,7 +24,7 @@ use ya_client_model::market::Reason;
 pub type Score = OfferTemplate;
 
 /// Result returned by `NegotiatorComponent` during Proposals evaluation.
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq, Eq)]
 pub enum NegotiationResult {
     /// `NegotiatorComponent` fully negotiated his part of Proposal, and it can be turned into
     /// valid Agreement without changes. Provider will send counter Proposal.
@@ -60,7 +60,7 @@ pub enum NegotiationResult {
 
 /// Result of agreement execution.
 #[non_exhaustive]
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub enum AgreementResult {
     // /// Failed to approve agreement. (Agreement even wasn't created).
     // /// It can happen for Provider in case call to `approve_agreement` will fail.

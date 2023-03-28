@@ -22,7 +22,10 @@ pub mod builtin {
 
 pub mod component {
     pub use ya_agreement_utils::ProposalView;
-    pub use ya_negotiator_component::static_lib::register_negotiator;
+    pub use ya_negotiator_component::static_lib::{
+        factory, register_negotiator, NegotiatorAsync, NegotiatorFactory, NegotiatorFactoryDefault,
+        NegotiatorMut,
+    };
     pub use ya_negotiator_component::{
         AgreementEvent, AgreementResult, NegotiationResult, NegotiatorComponent,
         NegotiatorComponentMut, NegotiatorsChain, RejectReason, Score,

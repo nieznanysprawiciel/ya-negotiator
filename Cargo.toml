@@ -10,9 +10,7 @@ members = [
     "negotiator-component",
     "agreement-utils",
     "builtin-negotiators",
-    "interfaces/grpc",
     "testing",
-    "examples/grpc-example",
     "testing/sample-negotiators"
 ]
 
@@ -20,7 +18,6 @@ members = [
 ya-agreement-utils = { path = "agreement-utils" }
 ya-negotiator-component = { path = "negotiator-component" }
 ya-builtin-negotiators = { path = "builtin-negotiators" }
-ya-grpc-negotiator-api = { path = "interfaces/grpc"}
 
 ya-client-model = "0.5"
 
@@ -45,7 +42,6 @@ env_logger = "0.9"
 
 ya-negotiators-testing = { path = "testing" }
 ya-testing-examples = { path = "testing/sample-negotiators" }
-grpc-example = { path = "examples/grpc-example" }
 
 # Tests
 test-binary = "2"

@@ -8,7 +8,6 @@ use std::sync::Arc;
 use super::negotiators::NegotiatorAddr;
 use crate::Negotiator;
 
-use ya_grpc_negotiator_api::create_grpc_negotiator;
 use ya_negotiator_component::component::NegotiatorComponent;
 use ya_negotiator_component::static_lib::{create_static_negotiator, factory};
 use ya_negotiator_component::NegotiatorsChain;
@@ -80,12 +79,8 @@ pub async fn create_negotiator(
         LoadMode::StaticLib { library } => {
             create_static_negotiator(&format!("{library}::{name}"), config.params, working_dir)?
         }
-        LoadMode::Grpc { path } => {
-            let plugin_path = match path.is_relative() {
-                true => plugins_dir.join(path),
-                false => path,
-            };
-            create_grpc_negotiator(plugin_path, &name, config.params, working_dir).await?
+        LoadMode::Grpc { .. } => {
+            bail!("Not implemented")
         }
         LoadMode::RemoteGrpc { address: _ } => {
             bail!("Not implemented")

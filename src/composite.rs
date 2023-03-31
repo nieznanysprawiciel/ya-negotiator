@@ -19,7 +19,7 @@ use ya_client_model::market::NewOffer;
 use crate::component::{NegotiationResult, NegotiatorComponent, ProposalView, Score};
 use crate::negotiators::{
     AgreementAction, AgreementRejected, AgreementSigned, ControlEvent, PostAgreementEvent,
-    ProposalAction, ProposalRejected, RequestAgreements,
+    ProposalAction, ProposalRejected, RequestAgreements, Shutdown,
 };
 use crate::negotiators::{AgreementFinalized, CreateOffer, ReactToAgreement, ReactToProposal};
 use crate::{NegotiatorsChain, ProposalsCollection};
@@ -424,6 +424,15 @@ impl Handler<RequestAgreements> for Negotiator {
 
     fn handle(&mut self, msg: RequestAgreements, _: &mut Context<Self>) -> Self::Result {
         self.agreements.set_goal(DecideGoal::Limit(msg.0))
+    }
+}
+
+impl Handler<Shutdown> for Negotiator {
+    type Result = ResponseFuture<anyhow::Result<()>>;
+
+    fn handle(&mut self, msg: Shutdown, _: &mut Context<Self>) -> Self::Result {
+        let components = self.components.clone();
+        async move { components.shutdown(msg.timeout).await }.boxed_local()
     }
 }
 

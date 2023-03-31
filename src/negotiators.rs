@@ -3,6 +3,7 @@ use actix::Actor;
 use anyhow::Result;
 use derive_more::Display;
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 use ya_agreement_utils::{AgreementView, OfferTemplate};
 use ya_client_model::market::{NewOffer, NewProposal, Proposal, Reason};
@@ -139,6 +140,12 @@ pub struct ControlEvent {
 #[rtype(result = "()")]
 pub struct RequestAgreements(pub usize);
 
+#[derive(Message)]
+#[rtype(result = "Result<()>")]
+pub struct Shutdown {
+    pub timeout: Duration,
+}
+
 // TODO: Consider, if this struct is helpful at all and remove if not.
 #[derive(Clone)]
 pub struct NegotiatorAddr(pub Addr<Negotiator>);
@@ -250,6 +257,10 @@ impl NegotiatorAddr {
 
     pub async fn request_agreements(&self, count: usize) -> Result<()> {
         Ok(self.0.send(RequestAgreements(count)).await?)
+    }
+
+    pub async fn shutdown(&self, timeout: Duration) -> Result<()> {
+        self.0.send(Shutdown { timeout }).await?
     }
 
     pub fn from(negotiator: Negotiator) -> NegotiatorAddr {

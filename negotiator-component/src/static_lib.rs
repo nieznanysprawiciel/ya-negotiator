@@ -99,6 +99,9 @@ pub trait NegotiatorFactory<T: Sized> {
 
     /// Negotiator is allowed to save data only inside `working_dir`. It should be the
     /// same directory across many executions of Provider/Requestor.
+    /// `config` contains `NegotiatorComponent` specific configuration
+    /// `agent_env` contains common configuration values shared between all `NegotiatorComponent`
+    /// and provided by agent application.   
     fn new(
         name: &str,
         config: serde_yaml::Value,

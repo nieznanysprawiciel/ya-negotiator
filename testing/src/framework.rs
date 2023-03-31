@@ -37,6 +37,8 @@ pub struct Framework {
 
     pub test_dir: PathBuf,
     pub test_timeout: Duration,
+
+    pub agent_env: serde_yaml::Value,
 }
 
 impl Framework {
@@ -48,6 +50,7 @@ impl Framework {
             providers: HashMap::new(),
             test_dir: prepare_test_dir(test_name)?,
             test_timeout: Duration::from_secs(10),
+            agent_env: serde_yaml::Value::Null,
         })
     }
 
@@ -71,13 +74,27 @@ impl Framework {
     }
 
     pub async fn add_provider(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
-        let node = Node::new(config, NodeType::Provider, None, self.test_dir.clone()).await?;
+        let node = Node::new(
+            config,
+            self.agent_env.clone(),
+            NodeType::Provider,
+            None,
+            self.test_dir.clone(),
+        )
+        .await?;
         self.providers.insert(node.node_id, node);
         Ok(self)
     }
 
     pub async fn add_requestor(mut self, config: NegotiatorsConfig) -> anyhow::Result<Self> {
-        let node = Node::new(config, NodeType::Requestor, None, self.test_dir.clone()).await?;
+        let node = Node::new(
+            config,
+            self.agent_env.clone(),
+            NodeType::Requestor,
+            None,
+            self.test_dir.clone(),
+        )
+        .await?;
         self.requestors.insert(node.node_id, node);
         Ok(self)
     }
@@ -89,6 +106,7 @@ impl Framework {
     ) -> anyhow::Result<Self> {
         let node = Node::new(
             config,
+            self.agent_env.clone(),
             NodeType::Provider,
             Some(name.to_string()),
             self.test_dir.clone(),
@@ -105,6 +123,7 @@ impl Framework {
     ) -> anyhow::Result<Self> {
         let node = Node::new(
             config,
+            self.agent_env.clone(),
             NodeType::Requestor,
             Some(name.to_string()),
             self.test_dir.clone(),

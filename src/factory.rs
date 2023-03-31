@@ -1,4 +1,4 @@
-use anyhow::bail;
+use anyhow::{anyhow, bail};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::net::SocketAddr;
@@ -45,10 +45,12 @@ pub struct NegotiatorsConfig {
 
 pub async fn create_negotiator_actor(
     config: NegotiatorsConfig,
+    agent_env: serde_yaml::Value,
     working_dir: PathBuf,
     plugins_dir: PathBuf,
 ) -> anyhow::Result<(Arc<NegotiatorAddr>, NegotiatorCallbacks)> {
-    let components = create_negotiators(config.clone(), working_dir, plugins_dir).await?;
+    let components =
+        create_negotiators(config.clone(), agent_env, working_dir, plugins_dir).await?;
 
     let (negotiator, callbacks) =
         Negotiator::new(NegotiatorsChain::with(components), config.composite);
@@ -57,6 +59,7 @@ pub async fn create_negotiator_actor(
 
 pub async fn create_negotiator(
     config: NegotiatorConfig,
+    agent_env: serde_yaml::Value,
     working_dir: PathBuf,
     plugins_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
@@ -68,17 +71,26 @@ pub async fn create_negotiator(
     fs::create_dir_all(&working_dir)?;
 
     Ok(match config.load_mode {
-        LoadMode::BuiltIn => create_builtin(&name, config.params, working_dir)?,
+        LoadMode::BuiltIn => create_builtin(&name, config.params, agent_env.clone(), working_dir)?,
         LoadMode::SharedLibrary { path } => {
             let plugin_path = match path.is_relative() {
                 true => plugins_dir.join(path),
                 false => path,
             };
-            create_shared_lib(&plugin_path, &name, config.params, working_dir)?
+            create_shared_lib(
+                &plugin_path,
+                &name,
+                config.params,
+                agent_env.clone(),
+                working_dir,
+            )?
         }
-        LoadMode::StaticLib { library } => {
-            create_static_negotiator(&format!("{library}::{name}"), config.params, working_dir)?
-        }
+        LoadMode::StaticLib { library } => create_static_negotiator(
+            &format!("{library}::{name}"),
+            config.params,
+            agent_env.clone(),
+            working_dir,
+        )?,
         LoadMode::Grpc { .. } => {
             bail!("Not implemented")
         }
@@ -90,14 +102,23 @@ pub async fn create_negotiator(
 
 pub async fn create_negotiators(
     config: NegotiatorsConfig,
+    agent_env: serde_yaml::Value,
     working_dir: PathBuf,
     plugins_dir: PathBuf,
 ) -> anyhow::Result<Vec<(String, Box<dyn NegotiatorComponent>)>> {
     let mut components = Vec::<(String, Box<dyn NegotiatorComponent>)>::new();
     for config in config.negotiators.into_iter() {
+        let name = config.name.clone();
         components.push((
-            config.name.clone(),
-            create_negotiator(config, working_dir.clone(), plugins_dir.clone()).await?,
+            name.clone(),
+            create_negotiator(
+                config,
+                agent_env.clone(),
+                working_dir.clone(),
+                plugins_dir.clone(),
+            )
+            .await
+            .map_err(|e| anyhow!("Creating negotiator '{name}': {e}"))?,
         ));
     }
     Ok(components)
@@ -106,12 +127,13 @@ pub async fn create_negotiators(
 pub fn create_builtin(
     name: &str,
     config: serde_yaml::Value,
+    agent_env: serde_yaml::Value,
     working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
     let negotiator = match &name[..] {
-        "LimitAgreements" => factory::<MaxAgreements>()(name, config, working_dir)?,
-        "LimitExpiration" => factory::<LimitExpiration>()(name, config, working_dir)?,
-        "AcceptAll" => factory::<AcceptAll>()(name, config, working_dir)?,
+        "LimitAgreements" => factory::<MaxAgreements>()(name, config, agent_env, working_dir)?,
+        "LimitExpiration" => factory::<LimitExpiration>()(name, config, agent_env, working_dir)?,
+        "AcceptAll" => factory::<AcceptAll>()(name, config, agent_env, working_dir)?,
         _ => bail!("BuiltIn negotiator {} doesn't exists.", &name),
     };
     Ok(negotiator)
@@ -121,6 +143,7 @@ pub fn create_shared_lib(
     _path: &Path,
     _name: &str,
     _config: serde_yaml::Value,
+    _agent_env: serde_yaml::Value,
     _working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
     bail!("Not supported")
@@ -167,6 +190,7 @@ mod tests {
         let test_dir = test_data_dir();
         create_negotiator_actor(
             serde_yaml::from_str(&serialized).unwrap(),
+            serde_yaml::Value::Null,
             test_dir.clone(),
             test_dir,
         )

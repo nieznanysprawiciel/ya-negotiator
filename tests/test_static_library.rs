@@ -91,7 +91,7 @@ async fn test_static_library() {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator_actor(config, test_dir.clone(), test_dir)
+    ) = create_negotiator_actor(config, serde_yaml::Value::Null, test_dir.clone(), test_dir)
         .await
         .unwrap();
 

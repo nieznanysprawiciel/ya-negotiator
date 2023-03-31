@@ -21,6 +21,7 @@ impl NegotiatorFactory<FilterNodes> for FilterNodes {
     fn new(
         _name: &str,
         config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
         _working_dir: PathBuf,
     ) -> anyhow::Result<FilterNodes> {
         let config: FilterNodesConfig = serde_yaml::from_value(config)?;

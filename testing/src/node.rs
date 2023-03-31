@@ -34,6 +34,7 @@ pub struct Node {
 impl Node {
     pub async fn new(
         config: NegotiatorsConfig,
+        agent_env: serde_yaml::Value,
         node_type: NodeType,
         name: Option<String>,
         working_dir: PathBuf,
@@ -43,7 +44,7 @@ impl Node {
         let working_dir = working_dir.join(&name);
 
         let (negotiator, callbacks) =
-            create_negotiator_actor(config, working_dir.clone(), working_dir).await?;
+            create_negotiator_actor(config, agent_env, working_dir.clone(), working_dir).await?;
 
         let (agreement_sender, _) = broadcast::channel(16);
         let (proposal_sender, _) = broadcast::channel(16);

@@ -11,6 +11,7 @@ impl NegotiatorFactory<AcceptAll> for AcceptAll {
     fn new(
         _name: &str,
         _config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
         _working_dir: PathBuf,
     ) -> anyhow::Result<AcceptAll> {
         Ok(AcceptAll {})

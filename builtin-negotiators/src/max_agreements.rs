@@ -25,6 +25,7 @@ impl NegotiatorFactory<MaxAgreements> for MaxAgreements {
     fn new(
         _name: &str,
         config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
         _working_dir: PathBuf,
     ) -> anyhow::Result<MaxAgreements> {
         let config: Config = serde_yaml::from_value(config)?;

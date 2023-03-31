@@ -28,6 +28,7 @@ impl NegotiatorFactory<LimitExpiration> for LimitExpiration {
     fn new(
         _name: &str,
         config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
         _working_dir: PathBuf,
     ) -> Result<LimitExpiration> {
         let config: Config = serde_yaml::from_value(config)?;

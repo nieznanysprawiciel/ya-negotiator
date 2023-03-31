@@ -1,6 +1,5 @@
 use anyhow::anyhow;
 use lazy_static::lazy_static;
-use serde_yaml::Value;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
@@ -10,7 +9,12 @@ use crate::component_mut::ComponentMutWrapper;
 use crate::NegotiatorComponentMut;
 
 pub type ConstructorFunction = Box<
-    dyn Fn(&str, serde_yaml::Value, PathBuf) -> anyhow::Result<Box<dyn NegotiatorComponent>>
+    dyn Fn(
+            &str,
+            serde_yaml::Value,
+            serde_yaml::Value,
+            PathBuf,
+        ) -> anyhow::Result<Box<dyn NegotiatorComponent>>
         + Send
         + Sync,
 >;
@@ -21,8 +25,8 @@ lazy_static! {
 }
 
 pub fn register_negotiator(library: &str, name: &str, constructor: ConstructorFunction) {
-    let negotiator = format!("{}::{}", library, name);
-    log::debug!("Registering: {}", negotiator);
+    let negotiator = format!("{library}::{name}");
+    log::debug!("Registering: {negotiator}");
     (*CONSTRUCTORS)
         .lock()
         .unwrap()
@@ -32,15 +36,16 @@ pub fn register_negotiator(library: &str, name: &str, constructor: ConstructorFu
 pub fn create_static_negotiator(
     name_path: &str,
     config: serde_yaml::Value,
+    agent_env: serde_yaml::Value,
     working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
     let map = (*CONSTRUCTORS)
         .lock()
-        .map_err(|e| anyhow!("Failed to acquire static Negotiator creation lock: {}", e))?;
+        .map_err(|e| anyhow!("Failed to acquire static Negotiator creation lock: {e}"))?;
 
     match map.get(name_path) {
-        Some(constructor) => constructor(name_path, config, working_dir),
-        None => Err(anyhow!("Negotiator '{}' not found.", name_path)),
+        Some(constructor) => constructor(name_path, config, agent_env, working_dir),
+        None => Err(anyhow!("Negotiator '{name_path}' not found.")),
     }
 }
 
@@ -76,7 +81,7 @@ impl NegotiatorInterfaceType for NegotiatorMut {}
 /// impl NegotiatorFactory<ExampleNegotiator> for ExampleNegotiator {
 ///     type Type = NegotiatorAsync;
 ///
-///     fn new(name: &str, config: Value, working_dir: PathBuf) -> anyhow::Result<ExampleNegotiator> {
+///     fn new(name: &str, config: Value, agent_env: Value, working_dir: PathBuf) -> anyhow::Result<ExampleNegotiator> {
 ///         Ok(ExampleNegotiator {
 ///             id: format!("important-negotiator-{name}")         
 ///         })
@@ -94,7 +99,12 @@ pub trait NegotiatorFactory<T: Sized> {
 
     /// Negotiator is allowed to save data only inside `working_dir`. It should be the
     /// same directory across many executions of Provider/Requestor.
-    fn new(name: &str, config: serde_yaml::Value, working_dir: PathBuf) -> anyhow::Result<T>;
+    fn new(
+        name: &str,
+        config: serde_yaml::Value,
+        agent_env: serde_yaml::Value,
+        working_dir: PathBuf,
+    ) -> anyhow::Result<T>;
 }
 
 /// `NegotiatorFactory` using `Default` implementation to create `NegotiatorComponent`.
@@ -110,7 +120,12 @@ where
 {
     type Type = <F as NegotiatorFactoryDefault<T>>::Type;
 
-    fn new(_name: &str, _config: Value, _working_dir: PathBuf) -> anyhow::Result<T> {
+    fn new(
+        _name: &str,
+        _config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
+        _working_dir: PathBuf,
+    ) -> anyhow::Result<T> {
         Ok(T::default())
     }
 }
@@ -145,7 +160,9 @@ pub fn factory<N>() -> ConstructorFunction
 where
     N: ToBoxed + NegotiatorFactory<N> + 'static,
 {
-    Box::new(|name, config, working_dir| Ok(N::new(name, config, working_dir)?.cast()))
+    Box::new(|name, config, agent_env, working_dir| {
+        Ok(N::new(name, config, agent_env, working_dir)?.cast())
+    })
 }
 
 /// This is overcomplicated, but is necessary for compiler, to stop complaining.

@@ -296,8 +296,13 @@ mod tests {
     }
 
     fn create_test_negotiator() -> Box<dyn NegotiatorComponent> {
-        factory::<ExampleNegotiator>()("ExampleNegotiator", serde_yaml::Value::Null, PathBuf::new())
-            .unwrap()
+        factory::<ExampleNegotiator>()(
+            "ExampleNegotiator",
+            serde_yaml::Value::Null,
+            serde_yaml::Value::Null,
+            PathBuf::new(),
+        )
+        .unwrap()
     }
 
     #[test_case(

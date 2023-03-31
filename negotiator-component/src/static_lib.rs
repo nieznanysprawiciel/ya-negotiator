@@ -76,7 +76,7 @@ impl NegotiatorInterfaceType for NegotiatorMut {}
 /// impl NegotiatorFactory<ExampleNegotiator> for ExampleNegotiator {
 ///     type Type = NegotiatorAsync;
 ///
-/// fn new(name: &str, config: Value, working_dir: PathBuf) -> anyhow::Result<ExampleNegotiator> {
+///     fn new(name: &str, config: Value, working_dir: PathBuf) -> anyhow::Result<ExampleNegotiator> {
 ///         Ok(ExampleNegotiator {
 ///             id: format!("important-negotiator-{name}")         
 ///         })

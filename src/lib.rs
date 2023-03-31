@@ -20,6 +20,14 @@ pub mod builtin {
     pub use ya_builtin_negotiators::{AcceptAll, LimitExpiration, MaxAgreements};
 }
 
+pub mod agreement {
+    pub use ya_agreement_utils::*;
+}
+
+pub mod lib {
+    pub use ya_negotiator_component::static_lib::{factory, register_negotiator};
+}
+
 pub mod component {
     pub use ya_agreement_utils::ProposalView;
     pub use ya_negotiator_component::static_lib::{

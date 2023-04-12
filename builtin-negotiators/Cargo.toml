@@ -4,8 +4,6 @@ version = "0.1.0"
 authors = ["nieznany.sprawiciel <witek@golem.network>"]
 edition = "2018"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
-
 [dependencies]
 ya-client-model = "0.5"
 ya-agreement-utils = { path = "../agreement-utils" }
@@ -18,5 +16,5 @@ humantime-serde = "1"
 log = "0.4"
 log-derive = "0.4"
 serde = "1.0"
-serde_yaml = "0.8"
+serde_yaml = "0.9"
 serde_json = "1.0"

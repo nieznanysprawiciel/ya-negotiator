@@ -1,14 +1,15 @@
 use chrono::{DateTime, Utc};
 
-use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
+use ya_agreement_utils::OfferTemplate;
 use ya_builtin_negotiators::*;
 use ya_negotiators::factory::*;
 use ya_negotiators::{NegotiatorCallbacks, ProposalAction};
+use ya_negotiators_testing::prepare_test_dir;
+use ya_testing_examples::{InfNodeInfo, NodeInfo, OfferDefinition, ServiceInfo};
 
 use ya_client_model::market::proposal::State;
 use ya_client_model::market::NewDemand;
 use ya_client_model::market::Proposal;
-use ya_negotiators_testing::prepare_test_dir;
 
 fn example_config() -> NegotiatorsConfig {
     let expiration_conf = NegotiatorConfig {
@@ -90,7 +91,9 @@ async fn test_static_library() {
             proposal_channel: mut proposals,
             agreement_channel: _agreements,
         },
-    ) = create_negotiator(config, test_dir.clone(), test_dir).unwrap();
+    ) = create_negotiator_actor(config, serde_yaml::Value::Null, test_dir.clone(), test_dir)
+        .await
+        .unwrap();
 
     let offer = negotiator.create_offer(&example_offer()).await.unwrap();
     let offer = proposal_from_demand(&offer);

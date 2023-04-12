@@ -1,10 +1,19 @@
-use ya_negotiator_component::component::NegotiatorComponent;
+use std::path::PathBuf;
+use ya_negotiator_component::static_lib::{NegotiatorAsync, NegotiatorFactory};
+use ya_negotiator_component::NegotiatorComponent;
 
 /// Negotiator that accepts every incoming Proposal.
 pub struct AcceptAll {}
 
-impl AcceptAll {
-    pub fn new(_config: serde_yaml::Value) -> anyhow::Result<AcceptAll> {
+impl NegotiatorFactory<AcceptAll> for AcceptAll {
+    type Type = NegotiatorAsync;
+
+    fn new(
+        _name: &str,
+        _config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
+        _working_dir: PathBuf,
+    ) -> anyhow::Result<AcceptAll> {
         Ok(AcceptAll {})
     }
 }

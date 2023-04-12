@@ -1,10 +1,11 @@
 use chrono::{DateTime, Duration, Utc};
 
-use ya_agreement_utils::{InfNodeInfo, NodeInfo, OfferDefinition, OfferTemplate, ServiceInfo};
+use ya_agreement_utils::OfferTemplate;
 use ya_builtin_negotiators::*;
 use ya_negotiators::factory::*;
 use ya_negotiators::AgreementResult;
 use ya_negotiators_testing::Framework;
+use ya_testing_examples::{InfNodeInfo, NodeInfo, OfferDefinition, ServiceInfo};
 
 fn example_config() -> NegotiatorsConfig {
     let expiration_conf = NegotiatorConfig {
@@ -66,6 +67,7 @@ async fn test_requestor_provider_flow() {
         example_config(),
         req_example_config(),
     )
+    .await
     .unwrap();
     let record = framework
         .run_for_templates(
@@ -110,6 +112,7 @@ async fn test_negotiations_after_agreement_termination() {
         example_config(),
         req_example_config(),
     )
+    .await
     .unwrap();
     let record = framework
         .run_for_templates(
@@ -137,6 +140,7 @@ async fn test_negotiations_after_agreement_termination() {
     // Add new Requestor to negotiate with Provider.
     let framework = framework
         .add_named_requestor(req_example_config(), "IncomingReq")
+        .await
         .unwrap();
     let record = framework
         .continue_run_for_named_requestor(
@@ -166,10 +170,13 @@ async fn test_negotiations_collect_period() {
         .unwrap()
         .test_timeout(std::time::Duration::from_secs(10))
         .add_provider(provider_config)
+        .await
         .unwrap()
         .add_requestor(req_example_config())
+        .await
         .unwrap()
         .add_requestor(req_example_config())
+        .await
         .unwrap();
 
     let before = Utc::now();

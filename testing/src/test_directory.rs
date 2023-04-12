@@ -9,6 +9,13 @@ fn test_data_dir() -> PathBuf {
         .join("test-workdir")
 }
 
+pub fn test_assets_dir() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("tests")
+        .join("assets")
+}
+
 fn escape_path(path: &str) -> String {
     // Windows can't handle colons
     path.replace("::", "_").to_string()

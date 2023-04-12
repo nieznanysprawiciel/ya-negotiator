@@ -1,10 +1,12 @@
 use anyhow::{anyhow, Result};
 use chrono::{DateTime, Duration, TimeZone, Utc};
 use serde::{Deserialize, Serialize};
+use std::path::PathBuf;
 
 use ya_agreement_utils::ProposalView;
-use ya_negotiator_component::component::{NegotiationResult, NegotiatorComponent, Score};
 use ya_negotiator_component::reason::RejectReason;
+use ya_negotiator_component::static_lib::{NegotiatorFactory, NegotiatorMut};
+use ya_negotiator_component::{NegotiationResult, NegotiatorComponentMut, Score};
 
 /// Negotiator that can limit number of running agreements.
 pub struct LimitExpiration {
@@ -20,8 +22,15 @@ pub struct Config {
     pub max_expiration: std::time::Duration,
 }
 
-impl LimitExpiration {
-    pub fn new(config: serde_yaml::Value) -> anyhow::Result<LimitExpiration> {
+impl NegotiatorFactory<LimitExpiration> for LimitExpiration {
+    type Type = NegotiatorMut;
+
+    fn new(
+        _name: &str,
+        config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
+        _working_dir: PathBuf,
+    ) -> Result<LimitExpiration> {
         let config: Config = serde_yaml::from_value(config)?;
         Ok(LimitExpiration {
             min_expiration: chrono::Duration::from_std(config.min_expiration)?,
@@ -43,7 +52,7 @@ fn proposal_expiration_from(proposal: &ProposalView) -> Result<DateTime<Utc>> {
     }
 }
 
-impl NegotiatorComponent for LimitExpiration {
+impl NegotiatorComponentMut for LimitExpiration {
     fn negotiate_step(
         &mut self,
         demand: &ProposalView,

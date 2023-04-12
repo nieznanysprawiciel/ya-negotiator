@@ -1,0 +1,214 @@
+{
+  "agreementId": "0d17822518dc3770042d69262d6b078d65c2cf8cf11fcdd0784388d31fd2a7e8",
+  "demand": {
+    "constraints": "(&(golem.node.debug.subnet=0987)\n\t(golem.com.payment.platform.erc20-rinkeby-tglm.address=*)\n\t(golem.com.pricing.model=linear)\n\t(&(golem.inf.mem.gib>=1.0)\n\t(golem.inf.storage.gib>=0.5)\n\t(golem.inf.cpu.threads>=1)\n\t(golem.runtime.name=vm)))",
+    "demandId": "eac6bc7b43fc42ceb3a430d8e4c3a240-ecb265e2d550720117eb67af97014d66240f158befda94b31bcb7ca8da62ff46",
+    "properties": {
+      "golem": {
+        "com": {
+          "payment": {
+            "chosen-platform": "erc20-rinkeby-tglm",
+            "debit-notes": {
+              "accept-timeout?": 240
+            },
+            "platform": {
+              "erc20-rinkeby-tglm": {
+                "address": "0xa5ad3f81e283983b8e9705b2e31d0c138bb2b1b7"
+              }
+            }
+          }
+        },
+        "node": {
+          "debug": {
+            "subnet": "0987"
+          },
+          "id": {
+            "name": "nieznanysprawiciel-laptop-Requestor-1"
+          }
+        },
+        "srv": {
+          "caps": {
+            "multi-activity": true
+          },
+          "comp": {
+            "expiration": 1660676376225,
+            "task_package": "hash:sha3:3f521a6f14ffb4564c656cfc73fed7bf2dc2b146a25877af9f13c88d:http://yacn2.dev.golem.network:8000/docker-ya-perf-scp-0683c45f5f.gvmi",
+            "vm": {
+              "package_format": "gvmkit-squash"
+            }
+          }
+        }
+      }
+    },
+    "requestorId": "0xa5ad3f81e283983b8e9705b2e31d0c138bb2b1b7",
+    "timestamp": "2022-08-16T18:29:37.470206934Z"
+  },
+  "offer": {
+    "constraints": "(&\n  (golem.srv.comp.expiration>1660674555801)\n  (golem.node.debug.subnet=0987)\n)",
+    "offerId": "30cfe77bee1e4ec797d7f79d8673d1a7-930399dfc4ad6d2ef56598b54aa66cd9c4d7ec76c9de7be606711aca70efc22f",
+    "properties": {
+      "golem": {
+        "activity": {
+          "caps": {
+            "transfer": {
+              "protocol": [
+                "http",
+                "gftp",
+                "https"
+              ]
+            }
+          }
+        },
+        "com": {
+          "payment": {
+            "debit-notes": {
+              "accept-timeout?": 240
+            },
+            "platform": {
+              "erc20-rinkeby-tglm": {
+                "address": "0x95369fc6fd02afeca110b9c32a21fb8ad899ee0a"
+              }
+            }
+          },
+          "pricing": {
+            "model": {
+              "@tag": "linear",
+              "linear": {
+                "coeffs": [
+                  0.0002777777777777778,
+                  0.001388888888888889,
+                  0.0
+                ]
+              }
+            }
+          },
+          "scheme": "payu",
+          "usage": {
+            "vector": [
+              "golem.usage.duration_sec",
+              "golem.usage.cpu_sec"
+            ]
+          }
+        },
+        "inf": {
+          "cpu": {
+            "architecture": "x86_64",
+            "brand": "Intel(R) Core(TM) i7-9750H CPU @ 2.60GHz",
+            "capabilities": [
+              "sse3",
+              "pclmulqdq",
+              "dtes64",
+              "monitor",
+              "dscpl",
+              "vmx",
+              "eist",
+              "tm2",
+              "ssse3",
+              "fma",
+              "cmpxchg16b",
+              "pdcm",
+              "pcid",
+              "sse41",
+              "sse42",
+              "x2apic",
+              "movbe",
+              "popcnt",
+              "tsc_deadline",
+              "aesni",
+              "xsave",
+              "osxsave",
+              "avx",
+              "f16c",
+              "rdrand",
+              "fpu",
+              "vme",
+              "de",
+              "pse",
+              "tsc",
+              "msr",
+              "pae",
+              "mce",
+              "cx8",
+              "apic",
+              "sep",
+              "mtrr",
+              "pge",
+              "mca",
+              "cmov",
+              "pat",
+              "pse36",
+              "clfsh",
+              "ds",
+              "acpi",
+              "mmx",
+              "fxsr",
+              "sse",
+              "sse2",
+              "ss",
+              "htt",
+              "tm",
+              "pbe",
+              "fsgsbase",
+              "adjust_msr",
+              "bmi1",
+              "avx2",
+              "smep",
+              "bmi2",
+              "rep_movsb_stosb",
+              "invpcid",
+              "deprecate_fpu_cs_ds",
+              "mpx",
+              "rdseed",
+              "adx",
+              "smap",
+              "clflushopt",
+              "processor_trace",
+              "sgx",
+              "sgx_lc"
+            ],
+            "cores": 6,
+            "model": "Stepping 10 Family 6 Model 302",
+            "threads": 11,
+            "vendor": "GenuineIntel"
+          },
+          "mem": {
+            "gib": 28.0
+          },
+          "storage": {
+            "gib": 57.276745605468754
+          }
+        },
+        "node": {
+          "debug": {
+            "subnet": "0987"
+          },
+          "id": {
+            "name": "nieznanysprawiciel-laptop-Provider-1"
+          },
+          "net": {
+            "is-public": true
+          }
+        },
+        "runtime": {
+          "capabilities": [
+            "vpn"
+          ],
+          "name": "vm",
+          "version": "0.2.11"
+        },
+        "srv": {
+          "caps": {
+            "multi-activity": true,
+            "payload-manifest": false
+          }
+        }
+      }
+    },
+    "providerId": "0x95369fc6fd02afeca110b9c32a21fb8ad899ee0a",
+    "timestamp": "2022-08-16T18:29:37.470206934Z"
+  },
+  "proposedSignature": "NoSignature",
+  "state": "Pending",
+  "timestamp": "2022-08-16T18:29:37.470206934Z",
+  "validTo": "2022-08-16T19:29:37.467876Z"
+}

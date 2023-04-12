@@ -5,9 +5,16 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
 use crate::component::NegotiatorComponent;
+use crate::component_mut::ComponentMutWrapper;
+use crate::NegotiatorComponentMut;
 
 pub type ConstructorFunction = Box<
-    dyn Fn(serde_yaml::Value, PathBuf) -> anyhow::Result<Box<dyn NegotiatorComponent>>
+    dyn Fn(
+            &str,
+            serde_yaml::Value,
+            serde_yaml::Value,
+            PathBuf,
+        ) -> anyhow::Result<Box<dyn NegotiatorComponent>>
         + Send
         + Sync,
 >;
@@ -18,8 +25,8 @@ lazy_static! {
 }
 
 pub fn register_negotiator(library: &str, name: &str, constructor: ConstructorFunction) {
-    let negotiator = format!("{}::{}", library, name);
-    println!("Registering: {}", negotiator);
+    let negotiator = format!("{library}::{name}");
+    log::debug!("Registering: {negotiator}");
     (*CONSTRUCTORS)
         .lock()
         .unwrap()
@@ -29,14 +36,168 @@ pub fn register_negotiator(library: &str, name: &str, constructor: ConstructorFu
 pub fn create_static_negotiator(
     name_path: &str,
     config: serde_yaml::Value,
+    agent_env: serde_yaml::Value,
     working_dir: PathBuf,
 ) -> anyhow::Result<Box<dyn NegotiatorComponent>> {
     let map = (*CONSTRUCTORS)
         .lock()
-        .map_err(|e| anyhow!("Failed to acquire static Negotiator creation lock: {}", e))?;
+        .map_err(|e| anyhow!("Failed to acquire static Negotiator creation lock: {e}"))?;
 
     match map.get(name_path) {
-        Some(constructor) => constructor(config, working_dir),
-        None => Err(anyhow!("Negotiator '{}' not found.", name_path)),
+        Some(constructor) => constructor(name_path, config, agent_env, working_dir),
+        None => Err(anyhow!("Negotiator '{name_path}' not found.")),
+    }
+}
+
+/// Helper factory trait that allows to convert different types to `Box<dyn NegotiatorComponent>`
+/// automatically through generic implementations.
+pub trait ToBoxed {
+    fn cast(self) -> Box<dyn NegotiatorComponent>;
+}
+
+pub trait NegotiatorInterfaceType {}
+
+/// Use `NegotiatorAsync` if you implement `NegotiatorComponent` trait directly.
+pub struct NegotiatorAsync;
+/// Use `NegotiatorMut` if you implement `NegotiatorComponentMut`.
+pub struct NegotiatorMut;
+
+impl NegotiatorInterfaceType for NegotiatorAsync {}
+impl NegotiatorInterfaceType for NegotiatorMut {}
+
+/// Defines common `Negotiators` creation interface.
+///
+/// Example:
+/// ```
+/// use std::path::PathBuf;
+/// use serde_yaml::Value;
+/// use ya_negotiator_component::NegotiatorFactory;
+/// use ya_negotiator_component::static_lib::NegotiatorAsync;
+///
+/// pub struct ExampleNegotiator {
+///     id: String,
+/// }
+///
+/// impl NegotiatorFactory<ExampleNegotiator> for ExampleNegotiator {
+///     type Type = NegotiatorAsync;
+///
+///     fn new(name: &str, config: Value, agent_env: Value, working_dir: PathBuf) -> anyhow::Result<ExampleNegotiator> {
+///         Ok(ExampleNegotiator {
+///             id: format!("important-negotiator-{name}")         
+///         })
+///     }
+/// }
+///
+/// ```
+pub trait NegotiatorFactory<T: Sized> {
+    /// `NegotiatorAsync` if you implement `NegotiatorComponent` trait directly.
+    /// `NegotiatorMut` if you implement `NegotiatorComponentMut`.
+    ///
+    /// This type helps keep `factory` function implementation generic independent of interface used.
+    /// Otherwise we encounter conflicting trait implementation issues.
+    type Type: NegotiatorInterfaceType;
+
+    /// Negotiator is allowed to save data only inside `working_dir`. It should be the
+    /// same directory across many executions of Provider/Requestor.
+    /// `config` contains `NegotiatorComponent` specific configuration
+    /// `agent_env` contains common configuration values shared between all `NegotiatorComponent`
+    /// and provided by agent application.   
+    fn new(
+        name: &str,
+        config: serde_yaml::Value,
+        agent_env: serde_yaml::Value,
+        working_dir: PathBuf,
+    ) -> anyhow::Result<T>;
+}
+
+/// `NegotiatorFactory` using `Default` implementation to create `NegotiatorComponent`.
+pub trait NegotiatorFactoryDefault<T: Sized + Default> {
+    type Type: NegotiatorInterfaceType;
+}
+
+impl<T, F, NT> NegotiatorFactory<T> for F
+where
+    T: Sized + Default,
+    F: NegotiatorFactoryDefault<T, Type = NT>,
+    NT: NegotiatorInterfaceType,
+{
+    type Type = <F as NegotiatorFactoryDefault<T>>::Type;
+
+    fn new(
+        _name: &str,
+        _config: serde_yaml::Value,
+        _agent_env: serde_yaml::Value,
+        _working_dir: PathBuf,
+    ) -> anyhow::Result<T> {
+        Ok(T::default())
+    }
+}
+
+/// Returns factory function for creating Negotiators.
+///
+/// Example usage:
+///
+/// ```
+/// use std::path::PathBuf;
+/// use ya_negotiator_component::{NegotiatorComponent, NegotiatorFactoryDefault};
+/// use ya_negotiator_component::static_lib::{factory, NegotiatorAsync, register_negotiator};
+///
+/// #[derive(Default)]
+/// pub struct ExampleNegotiator {}
+///
+/// impl NegotiatorComponent for ExampleNegotiator {}
+///
+/// impl NegotiatorFactoryDefault<ExampleNegotiator> for ExampleNegotiator {
+///     type Type = NegotiatorAsync;
+/// }
+///
+/// pub fn register_negotiators() {
+///     register_negotiator(
+///         "golem-negotiators",
+///         "LimitExpiration",
+///         factory::<ExampleNegotiator>(),
+///     );
+/// }
+/// ```
+pub fn factory<N>() -> ConstructorFunction
+where
+    N: ToBoxed + NegotiatorFactory<N> + 'static,
+{
+    Box::new(|name, config, agent_env, working_dir| {
+        Ok(N::new(name, config, agent_env, working_dir)?.cast())
+    })
+}
+
+/// This is overcomplicated, but is necessary for compiler, to stop complaining.
+/// You can check, what is the problem here: https://geo-ant.github.io/blog/2021/mutually-exclusive-traits-rust/
+trait CastWrapper<T: NegotiatorInterfaceType, F> {
+    fn cast(neg: F) -> Box<dyn NegotiatorComponent>;
+}
+
+impl<F> CastWrapper<NegotiatorAsync, F> for F
+where
+    F: NegotiatorFactory<F, Type = NegotiatorAsync> + NegotiatorComponent + 'static,
+{
+    fn cast(negotiator: F) -> Box<dyn NegotiatorComponent> {
+        Box::new(negotiator) as Box<dyn NegotiatorComponent>
+    }
+}
+
+impl<F> CastWrapper<NegotiatorMut, F> for F
+where
+    F: NegotiatorFactory<F, Type = NegotiatorMut> + NegotiatorComponentMut + 'static,
+{
+    fn cast(negotiator: F) -> Box<dyn NegotiatorComponent> {
+        Box::new(ComponentMutWrapper::new(negotiator)) as Box<dyn NegotiatorComponent>
+    }
+}
+
+impl<F, T> ToBoxed for F
+where
+    F: CastWrapper<T, F> + NegotiatorFactory<F, Type = T> + 'static,
+    T: NegotiatorInterfaceType,
+{
+    fn cast(self) -> Box<dyn NegotiatorComponent> {
+        F::cast(self)
     }
 }
